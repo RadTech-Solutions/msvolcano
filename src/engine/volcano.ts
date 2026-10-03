@@ -19,6 +19,8 @@ export interface Protein {
   id: string;
   x: number;
   y: number;
+  /** Mean log2 LFQ of the bait columns after imputation. */
+  baitMean: number;
   significant: boolean;
 }
 
@@ -129,7 +131,7 @@ export function computeVolcano(table: Table, p: Params): VolcanoResult {
     const y = -Math.log10(t.p);
     const gene = geneCol >= 0 ? (r[geneCol] ?? "").split(";")[0] : "";
     const id = idCol >= 0 ? (r[idCol] ?? "").split(";")[0] : "";
-    proteins.push({ row, gene: gene || id, id, x, y, significant: isSignificant(x, y, p.minFoldChange, p.curvature) });
+    proteins.push({ row, gene: gene || id, id, x, y, baitMean: mean(bait[i]), significant: isSignificant(x, y, p.minFoldChange, p.curvature) });
   });
   return { proteins, logTransformed, dropped };
 }

@@ -10,7 +10,6 @@ import { computeVolcano, cutoffCurve, defaultParams, lfqColumns, toCsv, type Par
 import { groupColumns, suggestRole, type Group, type Role } from "./groups";
 
 const MAX_LABELS = 150;
-const MAX_ROWS = 300;
 
 const svg = (body: string, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${body}</svg>`;
 const ICON = {
@@ -121,11 +120,11 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       </div>`, { optional: true })}
     ${step("s6", "+", "Experimental methods", "", `
       <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">New in version 2, not part of the 2016 publication and not peer reviewed. Compare with an established tool before relying on them.</p>
-      <div class="field"><label for="mode">Cutoff method</label><select id="mode"><option value="hyperbola">Hyperbolic curve (as published)</option><option value="perm">s0 score with permutation FDR (Perseus style)</option><option value="bh">Benjamini-Hochberg q value</option></select></div>
+      <div class="field"><label for="mode">Cutoff method</label><select id="mode"><option value="hyperbola">Hyperbolic curve (as published)</option><option value="perm">Permutation FDR (Perseus style)</option><option value="bh">Benjamini-Hochberg q value</option></select></div>
       <div id="sl-exp"></div>
       <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">Permutation FDR assumes samples are interchangeable. With few replicates there are only a handful of label shuffles (4 vs 4 gives 69), and it can call more proteins than the published curve when many background proteins differ slightly between groups.</p>
       <div class="field"><label for="imputation">Missing value imputation</label><select id="imputation"><option value="normal">Shifted normal (as published)</option><option value="mindet">MinDet: low quantile of each column</option><option value="minprob">MinProb: random draw around low quantile</option></select></div>`, { exp: true })}
-    <div style="display:flex;gap:12px;justify-content:space-between;padding:4px 6px 12px"><button class="link-btn" id="reset" type="button">Reset settings</button><button class="link-btn" id="share" type="button">Copy settings link</button></div>
+    <div class="sidebar-foot"><button class="link-btn" id="reset" type="button">Reset cutoff and plot settings</button><button class="link-btn" id="share" type="button">Copy settings link</button></div>
   </aside>
 
   <main class="main">
@@ -164,18 +163,19 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
           </details>
         </header>
         <div id="plot" role="group" aria-label="Interactive volcano plot. Hover points to see gene names. The interactors are listed in the table below."></div>
-        <div class="legend-key" id="legend"><span><i style="background:var(--plot-hit)"></i>Significant</span><span><i style="background:var(--plot-point)"></i>Other proteins</span><span><i class="d" style="background:var(--plot-pick)"></i>Highlighted</span><span><i class="l"></i>Cutoff</span></div>
+        <div class="legend-key" id="legend"><span><i style="background:var(--plot-hit)"></i>Significant</span><span><i style="background:var(--plot-point)"></i>Other proteins</span><span><i class="d" style="background:var(--plot-pick)"></i>Highlighted</span><span id="legend-cutoff"><i class="l"></i>Cutoff</span></div>
         <div class="notes" id="notes"></div>
       </div>
       <div class="card" style="margin-top:var(--space-4)">
         <div class="subtabs" role="tablist" aria-label="Results views">
           <button role="tab" id="tab-hits" aria-selected="true" aria-controls="panel-hits" tabindex="0" type="button">Interactors <span id="hit-count" class="num"></span></button>
-          <button role="tab" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Replicate agreement <span class="pill exp" style="margin-left:4px">Experimental</span><span id="qc-dot"></span></button>
+          <button role="tab" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Replicates <span class="pill exp" style="margin-left:4px">Experimental</span><span id="qc-dot"></span></button>
         </div>
         <div id="panel-hits" role="tabpanel" aria-labelledby="tab-hits">
           <div class="toolbar">
             <input id="hit-filter" type="search" placeholder="Filter by gene or ID" aria-label="Filter interactors" autocomplete="off" />
             <span class="spacer" style="flex:1"></span>
+            <button class="btn small" id="copy2" type="button">${ICON.copy}Copy genes</button>
           </div>
           <div class="tablewrap" id="hits"></div>
         </div>
@@ -189,13 +189,14 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 
 <main id="about-view" hidden>${aboutHtml}</main>
 <footer class="foot">If you use msVolcano, please cite <a href="https://doi.org/10.1002/pmic.201600167">Singh, Hein and Stewart, Proteomics 2016</a>. Free for noncommercial use under the PolyForm Noncommercial License 1.0.0.<small>Version ${__APP_VERSION__}</small></footer>
+<div class="mbar" id="mbar" hidden><b id="mbar-count"></b><span style="flex:1"></span><button class="btn small" id="mbar-adjust" type="button">Adjust cutoff</button><button class="btn small" id="mbar-plot" type="button">Plot</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>`;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /* ---------- State ---------- */
 
-const DEFAULT_NUM = { minFoldChange: defaultParams.minFoldChange, curvature: defaultParams.curvature, shift: defaultParams.shift, shrink: defaultParams.shrink, xMax: 15, yMax: 5, labelSize: 11, labelCount: 20, s0: 0.1, fdr: 0.05, perms: 250, qcut: 0.05 };
+const DEFAULT_NUM = { minFoldChange: defaultParams.minFoldChange, curvature: defaultParams.curvature, shift: defaultParams.shift, shrink: defaultParams.shrink, xMax: 15, yMax: 5, labelSize: 11, labelCount: 12, s0: 0.1, fdr: 0.05, perms: 250, qcut: 0.05 };
 // Exports always use this palette so a figure saved in dark mode is still print ready.
 const LIGHT_PLOT = { ink: "#1f2430", grid: "#e9ecf1", axis: "#5b6577", bg: "#ffffff", point: "#7b879c", hit: "#d94a2b", pick: "#0e8a86", curve: "#5b6577" };
 
@@ -219,6 +220,7 @@ const state = {
   sort: { key: "x", dir: -1 as 1 | -1 },
   filter: "",
   pending: null as Saved | null,
+  rowsShown: 25,
   num: { ...DEFAULT_NUM },
 };
 
@@ -344,14 +346,23 @@ function diagnose(table: Table): string {
   return "";
 }
 
+let prevChip = { html: "", hidden: true };
+// A failed load must not leave the user guessing which file the plot belongs to.
+function fail(msg: string) {
+  const chip = $("filechip");
+  chip.innerHTML = prevChip.html; chip.hidden = prevChip.hidden;
+  setError(`${state.table ? `Still showing ${state.fileName}. ` : ""}${msg}`, true);
+}
+
 async function loadFile(f: File) {
   location.hash === "#about" && (location.hash = "#tool");
   setError("");
   if (f.size > 150e6) toast("This is a large file. Reading it can take a while.");
+  prevChip = { html: $("filechip").innerHTML, hidden: $("filechip").hidden };
   $("filechip").hidden = false;
   $("filechip").innerHTML = `<b>${esc(f.name)}</b><span>Reading...</span>`;
   await paint();
-  try { loadText(await f.text(), f.name); } catch (err) { setError(`Could not read the file: ${(err as Error).message}`, true); }
+  try { loadText(await f.text(), f.name); } catch (err) { fail(`Could not read the file: ${(err as Error).message}`); }
 }
 
 function loadText(text: string, name: string, preset?: { baitName: string }) {
@@ -359,27 +370,26 @@ function loadText(text: string, name: string, preset?: { baitName: string }) {
   const table = parseDelimited(text, sniffSeparator(text));
   const lfq = lfqColumns(table);
   if (table.rows.length === 0 || table.columns.length < 2) {
-    $("filechip").hidden = true;
-    setError("That file has no table in it. msVolcano needs a tab separated MaxQuant proteinGroups.txt.", true);
+    fail("That file has no table in it. msVolcano needs a tab separated MaxQuant proteinGroups.txt.");
     return;
   }
   if (lfq.length < 4) {
-    $("filechip").hidden = true;
     const why = diagnose(table);
-    setError(`${why ? why + " " : ""}Found ${lfq.length} columns with "LFQ" in the name. msVolcano needs at least 4 (two bait and two control replicates) from a MaxQuant proteinGroups.txt.`, true);
+    fail(`${why ? why + " " : ""}Found ${lfq.length} columns with "LFQ" in the name. msVolcano needs at least 4 (two bait and two control replicates) from a MaxQuant proteinGroups.txt.`);
     return;
   }
   const groups = groupColumns(lfq);
   if (groups.length < 2) {
-    $("filechip").hidden = true;
-    setError(`Only one group of LFQ columns was found (${groups[0].name}). You need at least two: one bait and one control.`, true);
+    fail(`Only one group of LFQ columns was found (${groups[0].name}). You need at least two: one bait and one control.`);
     return;
   }
   state.table = table; state.fileName = name; state.fitAxes = true; state.result = null;
   state.groups = groups;
-  state.roles = new Map(groups.map((g) => [g.name, suggestRole(g.name)]));
+  // Only the first obvious bait and the first obvious control are pre-selected, so unrelated groups are never pooled silently.
+  const seen = { bait: false, control: false };
+  state.roles = new Map(groups.map((g) => { let r = suggestRole(g.name); if (r !== "off") { if (seen[r]) r = "off"; else seen[r] = true; } return [g.name, r]; }));
   state.excluded = new Set();
-  state.suggested = new Set(groups.filter((g) => suggestRole(g.name) !== "off").map((g) => g.name));
+  state.suggested = new Set(groups.filter((g) => state.roles.get(g.name) !== "off").map((g) => g.name));
   state.groupFilter = "";
   const chip = $("filechip");
   chip.hidden = false;
@@ -395,13 +405,14 @@ function loadText(text: string, name: string, preset?: { baitName: string }) {
   compute();
 }
 
-$("file").addEventListener("change", (e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void loadFile(f); });
+$("file").addEventListener("change", (e) => { const input = e.target as HTMLInputElement; const f = input.files?.[0]; if (f) void loadFile(f).finally(() => { input.value = ""; }); });
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, () => drop.classList.remove("over")));
 // Dropping anywhere on the page works.
-window.addEventListener("dragover", (e) => e.preventDefault());
-window.addEventListener("drop", (e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) void loadFile(f); });
+window.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("dragging"); });
+window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dragging"); });
+window.addEventListener("drop", (e) => { e.preventDefault(); document.body.classList.remove("dragging"); const f = e.dataTransfer?.files?.[0]; if (f) void loadFile(f); });
 $("hero-browse").addEventListener("click", () => $("file").click());
 $("replace").addEventListener("click", () => $("file").click());
 
@@ -461,8 +472,10 @@ const loadPeptides = (taxid: number) => {
   }
   return peptideCache.get(taxid)!;
 };
+let pendingOrg: string | undefined;
 fetch("peptides/index.json").then((r) => r.json()).then((list: { taxid: number; name: string; proteins: number }[]) => {
   $("organism").innerHTML = list.map((o) => `<option value="${o.taxid}">${o.name} (${o.proteins.toLocaleString()} proteins)</option>`).join("");
+  if (pendingOrg) ($("organism") as HTMLSelectElement).value = pendingOrg;
 }).catch(() => { /* stoichiometry stays unavailable without the tables */ });
 $("stoich").addEventListener("change", () => { $("stoichOpts").hidden = !($("stoich") as HTMLInputElement).checked; schedule("compute"); });
 for (const id of ["organism", "stoichBait"]) $(id).addEventListener("change", () => schedule("compute"));
@@ -498,6 +511,7 @@ function showState(kind: "hero" | "prompt" | "results") {
   $("hero").hidden = kind !== "hero";
   $("prompt").hidden = kind !== "prompt";
   $("results").hidden = kind !== "results";
+  if (kind !== "results") $("mbar").hidden = true;
 }
 
 function showPrompt(title: string, text: string, items: [string, boolean][]) {
@@ -545,6 +559,32 @@ function compute() {
 
 /* ---------- Draw ---------- */
 
+type Box = [number, number, number, number];
+const overlaps = (a: Box, b: Box) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+const LABEL_POS = ["top right", "bottom right", "top left", "bottom left", "middle right", "middle left", "top center", "bottom center"];
+
+/** Greedy label placement in pixel space. Returns the Plotly text position per point, or "" when no free spot exists. */
+function makePlacer(W: number, H: number, xMax: number, yMax: number, fs: number, markers: { x: number; y: number }[]) {
+  const toPx = (x: number, y: number): [number, number] => [((x + xMax) / (2 * xMax)) * W, (1 - y / yMax) * H];
+  const dots: Box[] = markers.map((m) => { const [px, py] = toPx(m.x, m.y); return [px - 5, py - 5, px + 5, py + 5]; });
+  const placed: Box[] = [];
+  return (pts: { x: number; y: number; gene: string }[]): string[] => pts.map((p) => {
+    const [px, py] = toPx(p.x, p.y);
+    const w = p.gene.length * fs * 0.6 + 4, h = fs + 4, g = 8;
+    for (const pos of LABEL_POS) {
+      const [v, hz] = pos.split(" ");
+      const x0 = hz === "right" ? px + g : hz === "left" ? px - g - w : px - w / 2;
+      const y0 = v === "top" ? py - g - h : v === "bottom" ? py + g : py - h / 2;
+      const box: Box = [x0, y0, x0 + w, y0 + h];
+      if (box[2] > W + 36 || box[0] < -36 || box[1] < -10 || box[3] > H + 10) continue;
+      if (placed.some((b) => overlaps(b, box)) || dots.some((d) => overlaps(d, box))) continue;
+      placed.push(box);
+      return pos;
+    }
+    return "";
+  });
+}
+
 const MODE_LABEL: Record<string, string> = { hyperbola: "Hyperbolic curve", perm: "Permutation FDR", bh: "Benjamini-Hochberg" };
 
 function modeSummary(mode: string): string {
@@ -583,13 +623,19 @@ async function draw(forceLight = false) {
   const c = forceLight
     ? LIGHT_PLOT
     : { ink: cssVar("--plot-ink"), grid: cssVar("--plot-grid"), axis: cssVar("--plot-axis"), bg: cssVar("--plot-bg"), point: cssVar("--plot-point"), hit: cssVar("--plot-hit"), pick: cssVar("--plot-pick"), curve: cssVar("--plot-curve") };
+  const marginB = narrow ? 120 : 96, marginT = ($("title") as HTMLInputElement).value ? 56 : 20;
+  const plotH = Math.max(200, $("plot").clientHeight - marginT - marginB);
   const hitSize = (q: { row: number }) => (state.stoich.size ? Math.min(30, 5 + 3 * Math.log2((state.stoich.get(q.row) ?? 0) + 1.5)) : 8);
-  const POS = ["top right", "bottom right", "top left", "bottom left"];
-  const trace = (pts: typeof prot, color: string, size: number | number[], text: boolean, opacity: number, symbol = "circle") => ({
+  const placer = makePlacer($("plot").clientWidth - 60 - (narrow ? 40 : 28), plotH, xMax, yMax, labelSize, [...hits, ...manualHits]);
+  // Highlighted proteins claim their label spot first, then the strongest interactors.
+  const manualPos = placer(manualHits);
+  const labelPos = placer(labelled);
+  const hiddenLabels = labelPos.filter((x) => !x).length;
+  const trace = (pts: typeof prot, color: string, size: number | number[], text: boolean, opacity: number, symbol = "circle", pos: string[] = []) => ({
     type: "scattergl", mode: text ? "markers+text" : "markers",
     x: pts.map((q) => q.x), y: pts.map((q) => q.y),
-    text: pts.map((q) => q.gene), textposition: pts.map((_, i) => POS[i % POS.length]), textfont: { size: labelSize, color: c.ink }, cliponaxis: false,
-    customdata: pts.map((q) => q.id), hovertemplate: "<b>%{text}</b><br>%{customdata}<br>difference %{x:.2f}<br>-log10 p %{y:.2f}<extra></extra>",
+    text: pts.map((q, i) => (pos[i] ? q.gene : "")), textposition: pos.map((x) => x || "top right"), textfont: { size: labelSize, color: c.ink }, cliponaxis: false,
+    customdata: pts.map((q) => [q.id, q.gene]), hovertemplate: "<b>%{customdata[1]}</b><br>%{customdata[0]}<br>difference %{x:.2f}<br>-log10 p %{y:.2f}<extra></extra>",
     marker: { color, size, opacity, symbol, line: { color: c.bg, width: symbol === "circle" && color === c.point ? 0 : 1.2 } },
   });
   const line = (pts: { x: number; y: number }[]) => ({ type: "scatter", mode: "lines", x: pts.map((q) => q.x), y: pts.map((q) => q.y), line: { color: c.curve, dash: "dash", width: 1.3 }, hoverinfo: "skip", showlegend: false });
@@ -597,23 +643,24 @@ async function draw(forceLight = false) {
   const title = ($("title") as HTMLInputElement).value;
   const baitName = ($("bait-name") as HTMLInputElement).value;
   const axisFont = { color: c.ink, size: 13 };
+  const footGap = narrow ? 56 : 62; // distance below the x axis, past the tick labels and axis title
   const layout = {
     font: { color: c.ink, family: "Geist Variable, system-ui, sans-serif", size: 13 },
     title: title ? { text: esc(title), x: 0.5, font: { size: 16 } } : undefined,
     xaxis: { title: { text: narrow ? "Δ mean log2 LFQ" : "Difference in mean log2 LFQ (bait minus control)", standoff: 10, font: axisFont }, range: [-xMax, xMax], zeroline: false, gridcolor: c.grid, showline: true, linecolor: c.axis, ticks: "outside", tickcolor: c.axis, tickfont: { color: c.ink } },
     yaxis: { title: { text: "-log10 p value", standoff: 8, font: axisFont }, range: [0, yMax], zeroline: false, gridcolor: c.grid, showline: true, linecolor: c.axis, ticks: "outside", tickcolor: c.axis, tickfont: { color: c.ink } },
-    showlegend: false, hovermode: "closest", margin: { t: title ? 56 : 20, r: narrow ? 40 : 28, b: 92, l: 60 },
+    showlegend: false, hovermode: "closest", margin: { t: marginT, r: narrow ? 40 : 28, b: marginB, l: 60 },
     paper_bgcolor: c.bg, plot_bgcolor: c.bg,
     hoverlabel: { bgcolor: c.bg, bordercolor: c.grid, font: { color: c.ink } },
-    annotations: [{ xref: "container", yref: "container", x: 0.012, y: 0.012, xanchor: "left", yanchor: "bottom", showarrow: false, text: esc(`${baitName ? `Bait: ${baitName}. ` : ""}${modeSummary(mode)}`), font: { size: 10, color: c.axis } }],
+    annotations: [{ xref: "paper", yref: "paper", x: 0, y: -(footGap / plotH), xanchor: "left", yanchor: "top", showarrow: false, text: esc(`${baitName ? `Bait: ${baitName}. ` : ""}${modeSummary(mode)}`).replace(/ \| /g, narrow ? "<br>" : " | "), font: { size: 10, color: c.axis } }],
   };
   const plotEl = $("plot");
   plotEl.setAttribute("aria-label", `Volcano plot of ${prot.length} proteins with ${hits.length} significant interactors${hits.length ? `, led by ${hits.slice(0, 3).map((h) => h.gene).join(", ")}` : ""}. The full list is in the table below.`);
   await Plotly.react(plotEl, [
     trace(rest, c.point, 6, false, 0.6),
     trace(hits, c.hit, hits.map(hitSize), false, 0.95),
-    trace(labelled, c.hit, labelled.map(hitSize), true, 0.95),
-    trace(manualHits, c.pick, 12, true, 1, "diamond"),
+    trace(labelled, c.hit, labelled.map(hitSize), true, 0.95, "circle", labelPos),
+    trace(manualHits, c.pick, 12, true, 1, "diamond", manualPos),
     ...(mode === "hyperbola" ? [line(curve.right), line(curve.left)] : []),
   ], layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"] });
   if (forceLight) return;
@@ -627,12 +674,18 @@ async function draw(forceLight = false) {
     <div class="stat"><span>Removed</span><b>${removed.toLocaleString()}</b><small>${d.contaminantOrReverse} contaminant or reverse, ${d.absentInBait} absent in bait${d.untestable ? `, ${d.untestable} untestable` : ""}</small></div>`;
   $("plot-title").textContent = baitName ? `Volcano plot: ${baitName}` : "Volcano plot";
   markStep("s3", false, `${MODE_LABEL[mode]} · ${hits.length} hits`);
+  $("legend-cutoff").hidden = mode !== "hyperbola";
+  $("mbar-count").textContent = `${hits.length} interactors`;
+  $("mbar").hidden = false;
   const notes: string[] = [];
   if (r.logTransformed) notes.push("LFQ values looked unlogged and were log2 transformed.");
-  if (mode === "perm") notes.push(state.perm ? `Experimental: permutation FDR ${state.perm.fdr}, ${state.perm.permutations} permutations, score threshold ${state.perm.threshold.toFixed(2)}.` : "Experimental: not enough replicates for permutation FDR.");
+  if (mode === "perm") notes.push(state.perm ? `Experimental: permutation FDR ${state.perm.fdr}, ${state.perm.permutations} permutations, score threshold ${state.perm.threshold.toFixed(2)}. Proteins can be called inside the funnel because each one is scored on its own variability, not by the fixed curve.` : "Experimental: not enough replicates for permutation FDR.");
   if (mode === "bh") notes.push(`Experimental: Benjamini-Hochberg q below ${state.num.qcut}, enriched side only.`);
   if (($("imputation") as HTMLSelectElement).value !== "normal") notes.push("Experimental imputation method in use.");
-  if (hits.length > labelLimit) notes.push(`Showing labels for the top ${labelLimit} of ${hits.length} interactors. Change "Labels shown" in step 4, or use the table.`);
+  if (hits.length > labelLimit) notes.push(`Showing labels for the top ${labelLimit} of ${hits.length} interactors.${narrow ? " On phones labels are limited to 5." : ' Change "Labels shown" in step 4, or use the table.'}`);
+  if (hiddenLabels) notes.push(`${hiddenLabels} label${hiddenLabels > 1 ? "s were" : " was"} left off to avoid overlaps. Hover a point to see its name, or use the table.`);
+  const pooledB = state.groups.filter((g) => state.roles.get(g.name) === "bait").length, pooledC = state.groups.filter((g) => state.roles.get(g.name) === "control").length;
+  if (pooledB > 1 || pooledC > 1) notes.push(`Pooled groups: ${pooledB > 1 ? `${pooledB} bait groups` : ""}${pooledB > 1 && pooledC > 1 ? " and " : ""}${pooledC > 1 ? `${pooledC} control groups` : ""} are treated as one. Check that this is what you want in step 2.`);
   if (state.stoichError) notes.push(`Stoichiometry: ${state.stoichError}`);
   $("notes").innerHTML = notes.map((n) => `<div>${esc(n)}</div>`).join("");
   renderHits();
@@ -640,7 +693,6 @@ async function draw(forceLight = false) {
 
 /* ---------- Tables ---------- */
 
-const MAX_ROWS_NOTE = MAX_ROWS;
 const fmtSt = (v: number | undefined) => (v === undefined || !Number.isFinite(v) ? "" : v.toPrecision(3));
 
 function renderHits() {
@@ -659,14 +711,15 @@ function renderHits() {
     const advice = mode === "hyperbola" ? "Lower the minimum enrichment or curvature in step 3." : mode === "perm" ? "Raise the FDR or lower s0 in Experimental methods." : "Raise the q value cutoff in Experimental methods.";
     $("hits").innerHTML = `<div class="callout" style="margin:14px;border:0">${ICON.info}<span>No proteins pass the cutoff. ${advice}</span></div>`; return;
   }
-  $("hits").innerHTML = `<table><thead><tr>${th("gene", "Gene", "Gene name")}${th("id", "Protein ID", "First majority protein ID")}${th("x", "log2 difference", "Mean log2 LFQ in bait minus control", true)}${th("y", "-log10 p", "Higher means stronger evidence", true)}${showQ ? th("q", "q value", "Benjamini-Hochberg adjusted p value", true) : ""}${showSt ? th("st", "Stoichiometry", "Relative to the bait, which is 1", true) : ""}</tr></thead><tbody>${rows.slice(0, MAX_ROWS).map((q) => `<tr><td class="gene">${esc(q.gene)}</td><td>${esc(q.id)}</td><td class="num">${q.x.toFixed(2)}</td><td class="num">${q.y.toFixed(2)}</td>${showQ ? `<td class="num">${(q.q ?? 0).toExponential(1)}</td>` : ""}${showSt ? `<td class="num">${fmtSt(state.stoich.get(q.row))}</td>` : ""}</tr>`).join("")}</tbody></table>${rows.length > MAX_ROWS_NOTE ? `<div class="notes">Showing the first ${MAX_ROWS_NOTE} of ${rows.length}. Export the CSV for the full list.</div>` : ""}`;
+  $("hits").innerHTML = `<table><thead><tr>${th("gene", "Gene", "Gene name")}${th("id", "Protein ID", "First majority protein ID")}${th("x", "log2 difference", "Mean log2 LFQ in bait minus control", true)}${th("y", "-log10 p", "Higher means stronger evidence", true)}${showQ ? th("q", "q value", "Benjamini-Hochberg adjusted p value", true) : ""}${showSt ? th("st", "Stoichiometry", "Relative to the bait, which is 1", true) : ""}</tr></thead><tbody>${rows.slice(0, state.rowsShown).map((q) => `<tr><td class="gene">${esc(q.gene)}</td><td>${esc(q.id)}</td><td class="num">${q.x.toFixed(2)}</td><td class="num">${q.y.toFixed(2)}</td>${showQ ? `<td class="num">${(q.q ?? 0).toExponential(1)}</td>` : ""}${showSt ? `<td class="num">${fmtSt(state.stoich.get(q.row))}</td>` : ""}</tr>`).join("")}</tbody></table>${rows.length > state.rowsShown ? `<div class="notes" style="display:flex;gap:12px;align-items:center">Showing ${state.rowsShown} of ${rows.length}. <button class="btn small" id="more" type="button">Show 50 more</button></div>` : ""}`;
+  $("more")?.addEventListener("click", () => { state.rowsShown += 50; renderHits(); });
   $("hits").querySelectorAll<HTMLButtonElement>("button[data-sort]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.sort!;
     state.sort = { key: k, dir: state.sort.key === k ? (state.sort.dir === 1 ? -1 : 1) : k === "gene" || k === "id" ? 1 : -1 };
     renderHits();
   }));
 }
-$("hit-filter").addEventListener("input", (e) => { state.filter = (e.target as HTMLInputElement).value; renderHits(); });
+$("hit-filter").addEventListener("input", (e) => { state.filter = (e.target as HTMLInputElement).value; state.rowsShown = 25; renderHits(); });
 
 function renderQc(r: VolcanoResult) {
   const p = state.params!;
@@ -682,8 +735,10 @@ function renderQc(r: VolcanoResult) {
   const verdict = bad
     ? `Check your replicates: ${worstPair} agree only moderately (r = ${worst.toFixed(2)}). One may be an outlier. You can untick it in step 2.`
     : `Replicates agree well. The lowest correlation within a group is ${worst.toFixed(2)}.`;
-  const cell = (v: number) => `style="background:color-mix(in oklch, var(--color-accent) ${Math.round(Math.max(0, (v - 0.5) * 2) * 70)}%, transparent)"`;
-  $("qcTable").innerHTML = `<div class="qc-verdict ${bad ? "warn" : ""}" style="margin:-10px -14px 10px">${bad ? ICON.alert.replace("<svg", '<svg width="18" height="18"') : ""}<span>${esc(verdict)}</span></div><table class="qc"><thead><tr><th></th>${names.map((n) => `<th scope="col">${esc(n)}</th>`).join("")}</tr></thead><tbody>${c.map((row, i) => `<tr><th scope="row">${esc(names[i])}</th>${row.map((v) => `<td ${cell(v)}>${v.toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table><p style="font-size:.82rem;color:var(--color-ink-2);margin-top:10px">Pearson correlation of imputed log2 LFQ values. Replicates of one condition should agree with each other more than with the other group.</p>`;
+  // Scale the tint from the lowest value in the matrix to 1 so small differences between replicates stay visible.
+  const minOff = Math.min(...c.flatMap((row, i) => row.filter((_, j) => j !== i)));
+  const cell = (v: number) => `style="background:color-mix(in oklch, var(--color-accent) ${Math.round(Math.max(0, Math.min(1, (v - minOff) / Math.max(1e-6, 1 - minOff))) * 40)}%, transparent)"`;
+  $("qcTable").innerHTML = `<div class="qc-verdict ${bad ? "warn" : ""}" style="margin:-10px -14px 10px">${bad ? ICON.alert.replace("<svg", '<svg width="18" height="18"') : ""}<span>${esc(verdict)}</span></div><table class="qc"><thead><tr><th></th>${names.map((n) => `<th scope="col">${esc(n)}</th>`).join("")}</tr></thead><tbody>${c.map((row, i) => `<tr><th scope="row">${esc(names[i])}</th>${row.map((v) => `<td ${cell(v)}>${v.toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table><p style="font-size:.82rem;color:var(--color-ink-2);margin-top:10px">Pearson correlation of imputed log2 LFQ values. Replicates of one condition should agree with each other more than with the other group. A deeper tint means a higher correlation, scaled from the lowest value shown to 1.</p>`;
   $("qc-dot").innerHTML = bad ? '<span class="dot-warn" role="img" aria-label="Replicate warning"></span>' : "";
 }
 
@@ -724,11 +779,15 @@ $("csv").addEventListener("click", () => {
   const a = Object.assign(document.createElement("a"), { href: url, download: `${stem()}_hits.csv` });
   a.click(); URL.revokeObjectURL(url);
 });
-$("copy").addEventListener("click", async () => {
+async function copyGenes() {
   closeMenu();
   const text = state.hits.map((q) => q.gene).join("\n");
   try { await navigator.clipboard.writeText(text); toast(`Copied ${state.hits.length} gene names`); } catch { toast("Copy is blocked by the browser"); }
-});
+}
+$("copy").addEventListener("click", () => void copyGenes());
+$("copy2").addEventListener("click", () => void copyGenes());
+$("mbar-adjust").addEventListener("click", () => { const st = $("s3") as HTMLDetailsElement; st.open = true; st.scrollIntoView({ behavior: "smooth", block: "start" }); });
+$("mbar-plot").addEventListener("click", () => $("results").scrollIntoView({ behavior: "smooth", block: "start" }));
 
 /* ---------- Reset and share ---------- */
 
@@ -750,6 +809,7 @@ function applySavedControls(s: Saved) {
   const set = (id: string, v: string | undefined) => { if (v !== undefined) ($(id) as HTMLSelectElement | HTMLInputElement).value = v; };
   set("mode", s.m); set("test", s.t); set("imputation", s.i); set("manual", s.man); set("title", s.ti); set("bait-name", s.b); set("stoichBait", s.sb);
   if (s.so) { ($("stoich") as HTMLInputElement).checked = true; $("stoichOpts").hidden = false; }
+  if (s.sg) { pendingOrg = s.sg; if ($("organism").children.length) ($("organism") as HTMLSelectElement).value = s.sg; }
 }
 function applyPendingRoles() {
   const s = state.pending;
@@ -770,9 +830,8 @@ $("reset").addEventListener("click", () => {
   ($("mode") as HTMLSelectElement).value = "hyperbola"; ($("test") as HTMLSelectElement).value = "student"; ($("imputation") as HTMLSelectElement).value = "normal";
   ($("stoich") as HTMLInputElement).checked = false; $("stoichOpts").hidden = true;
   state.fitAxes = true;
-  if (state.table) { state.roles = new Map(state.groups.map((g) => [g.name, suggestRole(g.name)])); state.suggested = new Set(state.groups.filter((g) => suggestRole(g.name) !== "off").map((g) => g.name)); state.excluded = new Set(); renderGroups(); }
   compute();
-  toast("Settings reset");
+  toast("Cutoff, plot and method settings reset. Your bait and control choices were kept.");
 });
 {
   const m = /^#s=(.+)$/.exec(location.hash);

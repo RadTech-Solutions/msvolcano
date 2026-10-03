@@ -1,5 +1,5 @@
 import type { Table } from "./parse";
-import { mean, randNormal, rng, sd, tTest } from "./stats";
+import { mean, quantile, randNormal, rng, sd, tTest } from "./stats";
 
 export interface Params {
   bait: string[];
@@ -11,7 +11,11 @@ export interface Params {
   minFoldChange: number;
   curvature: number;
   seed: number;
+  /** Experimental. "normal" is the method from the 2016 paper. */
+  imputation?: ImputationMethod;
 }
+
+export type ImputationMethod = "normal" | "mindet" | "minprob";
 
 export interface Protein {
   row: number;
@@ -21,6 +25,10 @@ export interface Protein {
   y: number;
   /** Mean log2 LFQ of the bait columns after imputation. */
   baitMean: number;
+  /** Standard error of the difference, used by the experimental s0 statistic. */
+  se: number;
+  /** Imputed log2 values, bait columns first then control columns. */
+  values: number[];
   significant: boolean;
 }
 
@@ -114,7 +122,17 @@ export function computeVolcano(table: Table, p: Params): VolcanoResult {
   }
 
   const rand = rng(p.seed);
+  const imputeLow = (m: number[][], probabilistic: boolean) => {
+    // Experimental: left censored imputation from a low quantile of each column (Lazar et al. 2016).
+    const nCols = m[0]?.length ?? 0;
+    const q = Array.from({ length: nCols }, (_, j) => quantile(m.map((v) => v[j]).filter((x) => !Number.isNaN(x)), 0.01));
+    const rowSds = m.map((v) => v.filter((x) => !Number.isNaN(x))).filter((v) => v.length > 1).map(sd);
+    const spread = probabilistic ? quantile(rowSds, 0.5) : 0;
+    return m.map((v) => v.map((x, j) => (Number.isNaN(x) ? q[j] + spread * randNormal(rand) : x)));
+  };
   const impute = (m: number[][]) => {
+    if (p.imputation === "mindet") return imputeLow(m, false);
+    if (p.imputation === "minprob") return imputeLow(m, true);
     const all = m.flat().filter((v) => !Number.isNaN(v));
     const mu = mean(all) - p.shift * sd(all);
     const sigma = p.shrink * sd(all);
@@ -131,20 +149,20 @@ export function computeVolcano(table: Table, p: Params): VolcanoResult {
     const y = -Math.log10(t.p);
     const gene = geneCol >= 0 ? (r[geneCol] ?? "").split(";")[0] : "";
     const id = idCol >= 0 ? (r[idCol] ?? "").split(";")[0] : "";
-    proteins.push({ row, gene: gene || id, id, x, y, baitMean: mean(bait[i]), significant: isSignificant(x, y, p.minFoldChange, p.curvature) });
+    proteins.push({ row, gene: gene || id, id, x, y, baitMean: mean(bait[i]), se: t.diff / t.t, values: [...bait[i], ...ctrl[i]], significant: isSignificant(x, y, p.minFoldChange, p.curvature) });
   });
   return { proteins, logTransformed, dropped };
 }
 
-export function toCsv(table: Table, proteins: Protein[], p: Params): string {
-  const header = ["gene", "protein_id", "log2_difference", "neg_log10_p", ...p.bait, ...p.control];
+export function toCsv(table: Table, proteins: Protein[], p: Params, stoich?: Map<number, number>): string {
+  const header = ["gene", "protein_id", "log2_difference", "neg_log10_p", ...(stoich?.size ? ["stoichiometry"] : []), ...p.bait, ...p.control];
   const bi = p.bait.map((n) => table.columns.indexOf(n));
   const ci = p.control.map((n) => table.columns.indexOf(n));
   const q = (s: string) => (/[",\n\t]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
   const lines = [header.join(",")];
   for (const pr of proteins) {
     const r = table.rows[pr.row];
-    lines.push([pr.gene, pr.id, pr.x.toFixed(4), pr.y.toFixed(4), ...bi.map((i) => r[i]), ...ci.map((i) => r[i])].map(q).join(","));
+    lines.push([pr.gene, pr.id, pr.x.toFixed(4), pr.y.toFixed(4), ...(stoich?.size ? [String(stoich.get(pr.row) ?? "")] : []), ...bi.map((i) => r[i]), ...ci.map((i) => r[i])].map(q).join(","));
   }
   return lines.join("\n");
 }

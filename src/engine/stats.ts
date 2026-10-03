@@ -103,3 +103,12 @@ export function randNormal(rand: () => number): number {
   const u = 1 - rand(), v = rand();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
+
+/** Linear interpolation quantile (type 7, same as R's default). Returns NaN for an empty array. */
+export function quantile(x: number[], q: number): number {
+  if (!x.length) return NaN;
+  const a = [...x].sort((m, n) => m - n);
+  const pos = (a.length - 1) * q;
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  return a[lo] + (a[hi] - a[lo]) * (pos - lo);
+}

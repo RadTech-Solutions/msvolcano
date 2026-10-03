@@ -11,7 +11,14 @@ This is version 2, a rewrite of the Shiny app described in the original paper. T
 * Student or Welch t-test per protein, volcano plot with the hyperbolic cutoff `y = curvature / (x - minFoldChange)` from Keilhauer, Hein and Mann (2015).
 * Labels significant proteins and any gene names you list. Exports PNG, SVG and a CSV of hits.
 
-Not yet ported: iBAQ style stoichiometry and loading files from an ftp URL.
+* Optional iBAQ style stoichiometry relative to the bait. Tryptic peptide tables for nine organisms are rebuilt from UniProt Swiss-Prot (`npm run` is not needed, the tables are in `public/peptides`; regenerate with `node scripts/build-peptides.mjs`). They follow the standard rule of no cleavage before proline, so values can differ from the 2016 tool.
+* A simulated example dataset (`scripts/make-example.mjs`) to try the app. It contains no real data.
+
+### Experimental features (not part of the 2016 publication)
+
+Clearly marked in the app and on the About page: s0 score with permutation FDR (Perseus style), Benjamini-Hochberg q values, MinDet and MinProb imputation, and a replicate correlation view. They are not peer reviewed or benchmarked. Tests cover the arithmetic and a pure noise calibration, not their scientific validity.
+
+Not ported: loading files from an ftp URL. Ideas: FragPipe, DIA-NN and Spectronaut input, limma style moderated t-test, Fisher exact for bait only proteins, CORUM complex enrichment.
 
 ## Run locally
 
@@ -36,4 +43,4 @@ GitHub shows a "Cite this repository" button from `CITATION.cff`.
 
 Free for noncommercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE). Research, teaching and nonprofit use are covered. If you copy or adapt the code, keep the `NOTICE` file with it. This is source available software, not OSI open source.
 
-For commercial use, contact the author for a commercial license.
+For commercial use, contact the author for a commercial license (see the [Google Scholar profile](https://scholar.google.com/citations?user=y62wfS8AAAAJ&hl=en)).

@@ -1,0 +1,56 @@
+[
+ {
+  "taxid": 9606,
+  "name": "Human",
+  "proteins": 20431,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 10090,
+  "name": "Mouse",
+  "proteins": 17283,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 10116,
+  "name": "Rat",
+  "proteins": 8233,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 559292,
+  "name": "Yeast (S. cerevisiae S288C)",
+  "proteins": 6733,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 7227,
+  "name": "Drosophila melanogaster",
+  "proteins": 3904,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 3702,
+  "name": "Arabidopsis thaliana",
+  "proteins": 16421,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 83333,
+  "name": "E. coli K12",
+  "proteins": 4531,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 7955,
+  "name": "Zebrafish",
+  "proteins": 3385,
+  "source": "UniProt reviewed, 2026_03"
+ },
+ {
+  "taxid": 6239,
+  "name": "C. elegans",
+  "proteins": 4489,
+  "source": "UniProt reviewed, 2026_03"
+ }
+]

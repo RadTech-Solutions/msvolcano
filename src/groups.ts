@@ -1,0 +1,27 @@
+export interface Group {
+  name: string;
+  columns: string[];
+}
+
+export type Role = "bait" | "control" | "off";
+
+const REPLICATE_SUFFIX = /[\s_.\-]*(?:rep(?:licate)?)?[\s_.\-]*\d+$/i;
+
+/** Group LFQ columns that only differ by a trailing replicate number, keeping column order. */
+export function groupColumns(columns: string[]): Group[] {
+  const groups = new Map<string, string[]>();
+  for (const col of columns) {
+    const stem = col.replace(/^LFQ intensity\s*/i, "");
+    const name = stem.replace(REPLICATE_SUFFIX, "") || stem;
+    const list = groups.get(name);
+    if (list) list.push(col); else groups.set(name, [col]);
+  }
+  return [...groups].map(([name, cols]) => ({ name, columns: cols }));
+}
+
+/** Suggest a role from the group name. Only obvious keywords; everything else stays off. */
+export function suggestRole(name: string): Role {
+  if (/(^|[\s_.\-])(ctrl|control|neg|mock|igg|empty|gfp|wt|beads?)([\s_.\-]|$)/i.test(name)) return "control";
+  if (/(^|[\s_.\-])bait([\s_.\-]|$)/i.test(name)) return "bait";
+  return "off";
+}

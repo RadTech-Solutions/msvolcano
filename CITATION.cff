@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use msVolcano, please cite the paper below and this software."
+title: "msVolcano"
+type: software
+authors:
+  - family-names: Singh
+    given-names: Sukhdeep
+repository-code: "https://github.com/uksurd88/msvolcano"
+license: PolyForm-Noncommercial-1.0.0
+preferred-citation:
+  type: article
+  title: "msVolcano: A flexible web application for visualizing quantitative proteomics data"
+  authors:
+    - family-names: Singh
+      given-names: Sukhdeep
+    - family-names: Hein
+      given-names: Marco Y.
+    - family-names: Stewart
+      given-names: A. Francis
+  journal: "Proteomics"
+  volume: 16
+  issue: 18
+  start: 2491
+  year: 2016
+  doi: "10.1002/pmic.201600167"

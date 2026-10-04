@@ -4,7 +4,7 @@ export const aboutHtml = `
   <h2>About msVolcano</h2>
 
   <h3>What it does</h3>
-  <p>msVolcano turns the output of a label free affinity purification or affinity enrichment mass spectrometry experiment (AP/MS, AE/MS) into a volcano plot and a list of candidate interactors. You give it a MaxQuant <code>proteinGroups.txt</code> that was processed with MaxLFQ, choose which LFQ columns are the bait replicates and which are the controls, and adjust a hyperbolic cutoff until the true interactors separate from the background binders.</p>
+  <p>msVolcano turns the output of a label free affinity purification or affinity enrichment mass spectrometry experiment (AP/MS, AE/MS) into a volcano plot and a list of candidate interactors. You give it a protein table (MaxQuant with LFQ, FragPipe, DIA-NN and others), choose which sample columns are the bait replicates and which are the controls, and adjust a hyperbolic cutoff until the true interactors separate from the background binders.</p>
 
   <h3>Why it was built</h3>
   <p>In an interactomics experiment, replicates of the affinity enriched bait are compared with negative controls. Proteins that bind non specifically sit around zero on the plot, and enriched interactors move to the right. Choosing the threshold that separates the two is the critical step and usually needs some manual tuning. At the time (2016) this analysis meant specialist desktop software and some scripting, which was a hurdle for bench scientists and a burden for mass spectrometry core facilities. msVolcano put every downstream step behind one simple interface that needs no bioinformatics knowledge. It was developed in the Stewart lab at the Biotechnology Center (BIOTEC) of TU Dresden and published in <em>Proteomics</em>.</p>
@@ -12,11 +12,12 @@ export const aboutHtml = `
   <h3>What happens to your data</h3>
   <ol>
     <li>Rows marked as reverse (decoy) hits or potential contaminants are removed.</li>
-    <li>Proteins that are absent from all bait replicates are removed.</li>
-    <li>LFQ values that look unlogged are transformed to log2.</li>
-    <li>Missing values are imputed by drawing from a normal distribution shifted down from the group mean (<code>shift</code> times the standard deviation) and narrowed (<code>shrink</code> times the standard deviation), which mimics low abundance proteins that fell below detection. The draw is seeded, so the same input gives the same plot.</li>
+    <li>Proteins with no value in any bait replicate are removed.</li>
+    <li>Intensities that look unlogged are transformed to log2. A zero means "not quantified" and counts as missing.</li>
+    <li>Proteins seen in at least 2 bait replicates and in no control replicate are set aside in their own list (see "New in version 2" below). The 2016 tool filled their control values in and tested them.</li>
+    <li>Remaining missing values are filled in by drawing from a normal distribution shifted down from the group mean (<code>shift</code> times the standard deviation) and narrowed (<code>spread</code> times the standard deviation), which mimics low abundance proteins that fell below detection. The draw is seeded, so the same input gives the same plot. Points that rest on a filled-in value are drawn hollow.</li>
     <li>A Student or Welch t-test is run for every protein, bait against control.</li>
-    <li>The volcano plot shows the difference of the means (x) against the negative log10 p value (y). A protein is called significant when it lies to the right of the hyperbolic curve <code>y = curvature / (x - minFoldChange)</code>, which tightens the p value requirement for weakly enriched proteins and relaxes it for strongly enriched ones.</li>
+    <li>The volcano plot shows the difference of the means (x) against the negative log10 p value (y). A protein is called significant when it lies to the right of the hyperbolic curve <code>y = curvature / (x - minFoldChange)</code>, which tightens the p value requirement for weakly enriched proteins and relaxes it for strongly enriched ones. This curve is a tuning device, not a calibrated false discovery rate.</li>
   </ol>
   <p>Your file is read by your browser and processed on your computer. Nothing is uploaded to any server.</p>
 
@@ -24,7 +25,22 @@ export const aboutHtml = `
   <p>Optionally, msVolcano estimates how abundant each enriched protein is relative to the bait, as described in the 2016 paper. The intensity above the control is divided by the number of theoretical tryptic peptides (7 to 30 amino acids) of the protein, then divided by the same quantity for the bait. The peptide tables for nine organisms were rebuilt from UniProt Swiss-Prot for version 2. They count tryptic peptides with the standard rule that trypsin does not cleave before proline, whereas the original tool cleaved there too, so absolute values can differ from the original. Compare numbers only within one analysis.</p>
 
   <h3>Input</h3>
-  <p>A tab separated MaxQuant <code>proteinGroups.txt</code>, or a comma separated file with the same column names. It needs at least two bait and two control columns whose names contain "LFQ". Gene names and majority protein IDs are used for labels when present. Use the example dataset (simulated, not real data) to try the tool.</p>
+  <p>A protein table with one intensity column per sample, tab or comma separated. Detected automatically:</p>
+  <ul>
+    <li>MaxQuant <code>proteinGroups.txt</code> with <strong>LFQ intensity</strong> columns.</li>
+    <li>FragPipe <code>combined_protein.tsv</code> (MaxLFQ intensity columns).</li>
+    <li>DIA-NN <code>report.pg_matrix.tsv</code>, Spectronaut protein group pivot, and Proteome Discoverer protein exports. These three readers are <strong>beta</strong>: written from the software documentation and not yet checked on many real files. Check the groups in step 2 and report problems on GitHub.</li>
+    <li>Perseus matrices (the columns marked Main) and any plain table of numbers.</li>
+  </ul>
+  <p>Gene names and protein IDs are used for labels when present. Use the example dataset (simulated, not real data) to try the tool.</p>
+
+  <h3>New in version 2 <span class="badge">Not in the 2016 paper</span></h3>
+  <p>These additions follow what the field has learned since 2016. They change what you see, so they are described here. Each can be switched off or reverted to the published behaviour.</p>
+  <ul>
+    <li><strong>Present only in bait.</strong> A protein found in at least 2 bait replicates and in no control is absent from the control by design, not by chance. A t-test on filled-in control values ranks it using numbers that were invented, and the result depends on the shift setting. Version 2 lists these proteins on their own tab, ranked by how many bait replicates saw them and by signal, with no p value. Imputation accuracy is driven mainly by how much of the missingness is "not at random" (<a href="https://doi.org/10.1038/s41598-021-81279-4">Jin et al. 2021</a>; <a href="https://doi.org/10.1021/acs.jproteome.5b00981">Lazar et al. 2016</a>). Choose "Fill in and test (as published)" in step 3, Advanced, to return to the 2016 behaviour.</li>
+    <li><strong>Visible imputation.</strong> Points that include a filled-in value are hollow, the interactors table shows how many values were filled in, and a "Do not fill in" mode tests only the measured values. A sensitivity check re-runs the analysis at nearby shift values and tells you how much of the interactor list moves.</li>
+    <li><strong>Quality checks.</strong> Replicate agreement from measured values only, a sample map (PCA), the share of proteins with a value in each sample, a loading balance check, and a bait recovery check (is the bait among the most enriched proteins?). These are warnings to look at, not statistical tests.</li>
+  </ul>
 
   <h3>Experimental features</h3>
   <p>Features marked <span class="badge">Experimental</span> are new in version 2. They are <strong>not part of the 2016 publication</strong>, have not been peer reviewed or benchmarked, and may change or disappear. They are offered as is, open for anyone to try, test and improve. Please check results from them against your own judgement and an established tool before drawing conclusions, and report problems on GitHub.</p>
@@ -32,9 +48,8 @@ export const aboutHtml = `
     <li><strong>s0 score with permutation FDR (Perseus style).</strong> Scores each protein as the difference divided by its standard error plus a fudge factor s0, shuffles the sample labels to estimate how many false calls to expect, and picks the threshold that keeps the false discovery rate at your chosen level. Idea from Tusher et al. 2001, as used in Perseus (Tyanova et al. 2016). Only proteins enriched in the bait are called.</li>
     <li><strong>Benjamini-Hochberg q value.</strong> Multiple testing correction of the t-test p values (Benjamini and Hochberg 1995), with a q value cutoff you choose.</li>
     <li><strong>Alternative imputation.</strong> MinDet and MinProb replace missing values using a low quantile of each column, following the comparison by Lazar et al. 2016 for values missing because they fell below detection.</li>
-    <li><strong>Replicate correlation.</strong> A quick quality check of how well replicates agree.</li>
   </ul>
-  <p>Ideas not built yet: input from FragPipe, DIA-NN and Spectronaut, moderated (limma style) t-tests, Fisher exact test for proteins seen only in bait, complex enrichment with CORUM. Pull requests and issues are welcome.</p>
+  <p>Ideas not built yet: moderated (limma style) t-tests, SAINT or limma result import, contaminant flagging with CRAPome, complex enrichment with CORUM. Pull requests and issues are welcome.</p>
 
   <h3>How to cite</h3>
   <p>If you use msVolcano, please cite the paper:</p>
@@ -48,6 +63,8 @@ export const aboutHtml = `
     <li>Cox J, Mann M. MaxQuant enables high peptide identification rates, individualized p.p.b.-range mass accuracies and proteome-wide protein quantification. <em>Nat Biotechnol</em> 2008;26(12):1367-1372.</li>
     <li>Hein MY, Hubner NC, Poser I, et al. A human interactome in three quantitative dimensions organized by stoichiometries and abundances. <em>Cell</em> 2015;163(3):712-723. (stoichiometry)</li>
     <li>Schwanhäusser B, Busse D, Li N, et al. Global quantification of mammalian gene expression control. <em>Nature</em> 2011;473(7347):337-342. (iBAQ)</li>
+    <li>Jin L, Bi Y, Hu C, et al. A comparative study of evaluating missing value imputation methods in label-free proteomics. <em>Sci Rep</em> 2021;11:1760. <a href="https://doi.org/10.1038/s41598-021-81279-4">doi:10.1038/s41598-021-81279-4</a></li>
+    <li>Lazar C, Gatto L, Ferro M, Bruley C, Burger T. Accounting for the multiple natures of missing values in label-free quantitative proteomics data sets to compare imputation strategies. <em>J Proteome Res</em> 2016;15(4):1116-1125. <a href="https://doi.org/10.1021/acs.jproteome.5b00981">doi:10.1021/acs.jproteome.5b00981</a></li>
     <li>Tusher VG, Tibshirani R, Chu G. Significance analysis of microarrays applied to the ionizing radiation response. <em>Proc Natl Acad Sci USA</em> 2001;98(9):5116-5121.</li>
   </ol>
 

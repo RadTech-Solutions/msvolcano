@@ -1,6 +1,8 @@
 export interface Table {
   columns: string[];
   rows: string[][];
+  /** Perseus column types (E, N, T, C, M) when the file has a #!{Type} annotation row. */
+  types?: string[];
 }
 
 /** Parse delimited text. Handles quoted fields and CRLF. */
@@ -28,7 +30,13 @@ export function parseDelimited(text: string, sep: string, quote = '"'): Table {
   }
   if (field !== "" || row.length) { row.push(field); rows.push(row); }
   const columns = rows.shift() ?? [];
-  return { columns, rows };
+  // Perseus exports carry annotation rows such as #!{Type}E that sit right below the header.
+  let types: string[] | undefined;
+  while (rows.length && rows[0][0]?.startsWith("#!{")) {
+    const row = rows.shift()!;
+    if (/^#!\{Type\}/.test(row[0])) types = row.map((cell, i) => (i === 0 ? cell.replace(/^#!\{Type\}/, "") : cell));
+  }
+  return types ? { columns, rows, types } : { columns, rows };
 }
 
 export function sniffSeparator(text: string): string {

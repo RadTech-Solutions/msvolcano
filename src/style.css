@@ -406,3 +406,28 @@ body.dragging::after { content: "Drop your file to analyze it"; position: fixed;
 
 .main { grid-template-columns: minmax(0, 1fr); }
 .card, .stats, .legend-key, .notes { min-width: 0; }
+
+/* Missing values, presence only and quality checks */
+.pill.new { background: var(--color-accent-soft); color: var(--color-accent); border-color: color-mix(in oklab, var(--color-accent) 35%, transparent); }
+.legend-key i.h { background: transparent; border: 1.7px solid var(--plot-hit); box-sizing: border-box; }
+.stats.four { grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+.qc-section { padding: 14px; border-bottom: 1px solid var(--color-line); }
+.qc-section:last-child { border-bottom: 0; }
+.qc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.qc-head h3 { margin: 0; font-size: .95rem; font-weight: 620; }
+.qc-note { font-size: .82rem; color: var(--color-ink-2); margin: 8px 0 0; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.check-row { display: grid; grid-template-columns: 22px 1fr; gap: 10px; padding: 10px 12px; border: 1px solid var(--color-line); border-radius: var(--radius-m); font-size: .88rem; background: var(--color-surface); }
+.check-row b { font-weight: 620; }
+.check-row div > div { color: var(--color-ink-2); margin-top: 2px; }
+.check-row .ci { display: grid; place-items: start center; padding-top: 1px; }
+.check-row.ok .ci { color: var(--color-accent); }
+.check-row.warn { background: var(--color-warn-soft); border-color: color-mix(in oklab, var(--color-warn) 40%, var(--color-line)); }
+.check-row.warn .ci { color: var(--color-warn); }
+.check-row.info .ci { color: var(--color-ink-3); }
+.bar { height: 8px; border-radius: 99px; background: var(--color-surface-2); overflow: hidden; border: 1px solid var(--color-line); }
+.bar i { display: block; height: 100%; background: var(--color-accent); }
+table.cov { width: 100%; }
+table.cov th { position: static; background: none; text-align: left; font-weight: 500; color: var(--color-ink); }
+#pca { width: 100%; height: 340px; }
+@media (max-width: 960px) { .stats.four { grid-template-columns: 1fr 1fr; } }

@@ -40,7 +40,8 @@ function addProtein({ gene, name, base, diff, sdRep = 0.35, ctrlMissing = 0, bai
   }
   const raw = (v) => Math.round(2 ** v);
   const baitRaw = bait.map(raw), ctrlRaw = ctrl.map(raw);
-  for (let k = 0; k < ctrlMissing; k++) ctrlRaw[(k + Math.floor(rand() * N)) % N] = 0;
+  if (ctrlMissing >= N) ctrlRaw.fill(0);
+  else for (let k = 0; k < ctrlMissing; k++) ctrlRaw[(k + Math.floor(rand() * N)) % N] = 0;
   for (let k = 0; k < baitMissing; k++) baitRaw[(k + Math.floor(rand() * N)) % N] = 0;
   const peptides = Math.max(2, Math.round(2 + (base - 18) * 1.2 + 3 * rand()));
   const unique = Math.max(1, peptides - Math.floor(rand() * 3));
@@ -78,11 +79,20 @@ for (const [g, diff, sdRep] of weak) {
   addProtein({ gene: g, name: `Weak associated protein ${g} (simulated)`, base: uniform(22, 28), diff, sdRep });
 }
 
+// Proteins seen in most bait replicates and in no control at all (missing by design, not by chance).
+// The app lists these separately instead of testing them on filled-in control values.
+for (let i = 1; i <= 6; i++) {
+  addProtein({
+    gene: `BND${i}`, name: `Bait only protein BND${i} (simulated)`, base: uniform(24, 29), diff: 7, sdRep: 0.3,
+    ctrlMissing: 4, baitMissing: i % 3 === 0 ? 1 : 0,
+  });
+}
+
 // Background: no enrichment, noise around zero, intensities 1e6 to 1e10.
 const stems = ["ZNF", "MRP", "RPL", "RPS", "HSP", "DNJ", "TUB", "ACT", "PRX", "GST", "EIF", "SEC", "VPS", "NDU", "COX", "ATP", "PSM", "UBE", "CDK", "MAP"];
-const used = new Set(["BAITX", ...trueNames, ...weak.map((w) => w[0])]);
+const used = new Set(["BAITX", ...trueNames, ...weak.map((w) => w[0]), ...Array.from({ length: 6 }, (_, i) => `BND${i + 1}`)]);
 let bg = 0;
-while (bg < 560) {
+while (bg < 554) {
   const gene = `${pick(stems)}${Math.floor(1 + rand() * 40)}${pick(["", "", "A", "B", "L"])}`;
   if (used.has(gene)) continue;
   used.add(gene);

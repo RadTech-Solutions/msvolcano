@@ -6,7 +6,8 @@ This is version 2, a rewrite of the Shiny app described in the original paper. T
 
 ## What it does
 
-* Removes contaminants and reverse hits, log2 transforms unlogged LFQ values.
+* Reads MaxQuant (LFQ), FragPipe, DIA-NN, Spectronaut and Proteome Discoverer tables, Perseus matrices and plain numeric tables. The DIA-NN, Spectronaut and Proteome Discoverer readers are beta.
+* Removes contaminants and reverse hits, log2 transforms unlogged intensities.
 * Imputes missing values from a shifted normal distribution (`shift`, `shrink`), seeded so results repeat.
 * Student or Welch t-test per protein, volcano plot with the hyperbolic cutoff `y = curvature / (x - minFoldChange)` from Keilhauer, Hein and Mann (2015).
 * Labels significant proteins and any gene names you list. Exports PNG, SVG and a CSV of hits.
@@ -14,11 +15,17 @@ This is version 2, a rewrite of the Shiny app described in the original paper. T
 * Optional iBAQ style stoichiometry relative to the bait. Tryptic peptide tables for nine organisms are rebuilt from UniProt Swiss-Prot (`npm run` is not needed, the tables are in `public/peptides`; regenerate with `node scripts/build-peptides.mjs`). They follow the standard rule of no cleavage before proline, so values can differ from the 2016 tool.
 * A simulated example dataset (`scripts/make-example.mjs`) to try the app. It contains no real data.
 
+### New in version 2 (not part of the 2016 publication)
+
+* Proteins seen in two or more bait replicates and in no control are listed separately with replicate counts instead of being tested on filled-in numbers. The published behaviour is one setting away.
+* Points that rest on filled-in values are hollow, the table says how many values were filled in, there is a "do not fill in" mode, and a sensitivity check shows how much the hit list depends on the fill-in shift.
+* Quality checks: replicate agreement from measured values, PCA of samples, per-sample coverage, loading balance, and bait recovery.
+
 ### Experimental features (not part of the 2016 publication)
 
-Clearly marked in the app and on the About page: s0 score with permutation FDR (Perseus style), Benjamini-Hochberg q values, MinDet and MinProb imputation, and a replicate correlation view. They are not peer reviewed or benchmarked. Tests cover the arithmetic and a pure noise calibration, not their scientific validity.
+Clearly marked in the app and on the About page: s0 score with permutation FDR (Perseus style), Benjamini-Hochberg q values, and MinDet and MinProb imputation. They are not peer reviewed or benchmarked. Tests cover the arithmetic and a pure noise calibration, not their scientific validity.
 
-Not ported: loading files from an ftp URL. Ideas: FragPipe, DIA-NN and Spectronaut input, limma style moderated t-test, Fisher exact for bait only proteins, CORUM complex enrichment.
+Not ported: loading files from an ftp URL. Ideas: limma style moderated t-test, SAINT or limma result import, CRAPome contaminant flags, CORUM complex enrichment.
 
 ## Run locally
 

@@ -3,7 +3,7 @@ import { benjaminiHochberg, permutationFdr, replicateCorrelation } from "../src/
 import { quantile, randNormal, rng } from "../src/engine/stats";
 import type { Protein } from "../src/engine/volcano";
 
-const prot = (values: number[], row = 0): Protein => ({ row, gene: "g" + row, id: "i" + row, x: 0, y: 0, baitMean: 0, se: 0, values, significant: false });
+const prot = (values: number[], row = 0): Protein => ({ row, gene: "g" + row, id: "i" + row, x: 0, y: 0, baitMean: 0, se: 0, values, raw: values, imputed: values.map(() => false), significant: false });
 
 describe("benjaminiHochberg", () => {
   it("matches a hand computed example", () => {

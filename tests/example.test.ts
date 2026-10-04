@@ -6,7 +6,9 @@ import { computeVolcano, defaultParams, lfqColumns } from "../src/engine/volcano
 const table = parseDelimited(text, "\t");
 const bait = lfqColumns(table).filter((c) => /BAIT_/.test(c));
 const control = lfqColumns(table).filter((c) => /CTRL_/.test(c));
-const result = computeVolcano(table, { ...defaultParams, bait, control });
+// The interface lists proteins seen only in bait separately, so the test does the same.
+const result = computeVolcano(table, { ...defaultParams, bait, control, presence: "separate" });
+const published = computeVolcano(table, { ...defaultParams, bait, control, presence: "include" });
 
 const trueInteractors = ["RLN1A", "RLN1B", "TPC2", "TPC4", "ASM3", "ASM7", "KDR5", "CHP9", "NUF2L", "SRB4", "PMC1", "HELX3"];
 
@@ -38,5 +40,17 @@ describe("synthetic example", () => {
     expect(weak).toHaveLength(10);
     expect(nSig).toBeGreaterThanOrEqual(1);
     expect(nSig).toBeLessThan(10);
+  });
+
+  it("lists the six bait only proteins separately and not as hits", () => {
+    expect(result.presenceOnly.map((p) => p.gene).sort()).toEqual(["BND1", "BND2", "BND3", "BND4", "BND5", "BND6"]);
+    expect(result.presenceOnly.every((p) => p.nObs >= 3)).toBe(true);
+    expect(result.proteins.some((p) => p.gene.startsWith("BND"))).toBe(false);
+  });
+
+  it("as published, the same proteins are tested on filled-in control values", () => {
+    const q = published.proteins.filter((p) => p.gene.startsWith("BND"));
+    expect(q).toHaveLength(6);
+    expect(q.every((p) => p.imputed.slice(4).every(Boolean))).toBe(true);
   });
 });

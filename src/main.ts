@@ -3,10 +3,12 @@ import "@fontsource-variable/geist-mono";
 import Plotly from "plotly.js-cartesian-dist-min";
 import "./style.css";
 import { aboutHtml } from "./about";
-import { benjaminiHochberg, permutationFdr, replicateCorrelation, type PermutationResult } from "./engine/experimental";
+import { benjaminiHochberg, permutationFdr, type PermutationResult } from "./engine/experimental";
+import { baitRecovery, coverageCheck, loadingCheck, observedCorrelation, samplePca, type Check, type PcaResult } from "./engine/qc";
 import { parseDelimited, sniffSeparator, type Table } from "./engine/parse";
 import { computeStoichiometry, parsePeptideTable } from "./engine/stoich";
-import { computeVolcano, cutoffCurve, defaultParams, lfqColumns, toCsv, type Params, type Protein, type VolcanoResult } from "./engine/volcano";
+import { detectFormat, explainUnsupported } from "./engine/formats";
+import { computeVolcano, cutoffCurve, defaultParams, lfqColumns, presenceCsv, shiftSensitivity, toCsv, type Params, type Protein, type VolcanoResult } from "./engine/volcano";
 import { groupColumns, suggestRole, type Group, type Role } from "./groups";
 
 const MAX_LABELS = 150;
@@ -93,11 +95,12 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 <div class="workspace" id="tool-view">
   <aside class="sidebar" aria-label="Analysis settings">
     ${step("s1", "1", "Add your data", "MaxQuant file", `
-      <label class="drop" id="drop" for="file">${ICON.upload}<strong>Drop proteinGroups.txt here</strong><span>or click to browse (.txt, .tsv, .csv)</span></label>
+      <label class="drop" id="drop" for="file">${ICON.upload}<strong>Drop your protein table here</strong><span>MaxQuant, FragPipe, DIA-NN and more. Click to browse.</span></label>
       <input id="file" class="sr" type="file" accept=".txt,.tsv,.csv" />
       <div class="filechip" id="filechip" hidden></div>
+      <p class="help" id="fmt-note" style="font-size:.78rem;color:var(--color-ink-3)" hidden></p>
       <div class="row-actions"><button class="btn small" id="example" type="button">${ICON.flask}Try an example dataset (simulated)</button><button class="btn small" id="replace" type="button" hidden>Replace file</button></div>
-      <details style="font-size:.82rem;color:var(--color-ink-2)"><summary style="cursor:pointer;font-weight:600">What file do I need?</summary><p style="margin-top:6px">The <code>proteinGroups.txt</code> from your MaxQuant output folder. Switch on <b>LFQ</b> in MaxQuant before running it, so the file has columns named "LFQ intensity ...". Other formats are not supported yet.</p></details>
+      <details style="font-size:.82rem;color:var(--color-ink-2)"><summary style="cursor:pointer;font-weight:600">What file do I need?</summary><p style="margin-top:6px">A protein table with one intensity column per sample. Supported: MaxQuant <code>proteinGroups.txt</code> (with <b>LFQ</b> switched on), FragPipe <code>combined_protein.tsv</code>, DIA-NN <code>report.pg_matrix.tsv</code>, Spectronaut protein group pivot, Proteome Discoverer protein export, Perseus matrices, or any table of numbers. DIA-NN, Spectronaut and Proteome Discoverer readers are beta.</p></details>
       <p class="help" style="font-size:.78rem;color:var(--color-ink-3);display:flex;gap:6px;align-items:center"><span style="width:14px;height:14px;display:inline-flex">${ICON.lock}</span>Stays on this computer. Works offline once loaded.</p>`, { open: true })}
     ${step("s2", "2", "Choose bait and control", "Pick two groups", `
       <p class="help" style="font-size:.8rem;color:var(--color-ink-3)">Replicates are grouped by name. Mark one group as bait and one as control. Untick a replicate to leave it out. Several bait groups are pooled into one.</p>
@@ -105,25 +108,29 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     ${step("s3", "3", "Set the cutoff", "Hyperbolic curve", `
       <div class="field"><label for="test">Statistical test</label><select id="test"><option value="student">Student t-test (equal variance)</option><option value="welch">Welch t-test (unequal variance)</option></select></div>
       <div id="sl-cutoff"></div>
-      <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600;font-size:.85rem">Advanced: missing values</summary><div id="sl-impute" style="display:grid;gap:var(--space-3);margin-top:var(--space-3)"></div></details>`)}
+      <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600;font-size:.85rem">Advanced: missing values <span class="pill new">New in v2</span></summary>
+        <div style="display:grid;gap:var(--space-3);margin-top:var(--space-3)">
+          <div class="field"><label for="presence">Seen in bait, never in a control</label><select id="presence"><option value="separate">List separately (recommended)</option><option value="include">Fill in and test (as published)</option></select><span class="help">A protein found in at least 2 bait replicates and in no control is absent from the control by design. A t-test would rank it on made-up numbers, so it gets its own list with replicate counts instead.</span></div>
+          <div class="field"><label for="imputation">Filling in other missing values</label><select id="imputation"><option value="normal">Shifted normal (as published)</option><option value="mindet">MinDet: low quantile of each column</option><option value="minprob">MinProb: random draw around low quantile</option><option value="none">Do not fill in: test the measured values only</option></select><span class="help">Filled-in values are drawn as hollow points. "Do not fill in" needs two measured values per group.</span></div>
+          <div id="sl-impute" style="display:grid;gap:var(--space-3)"></div>
+        </div></details>`)}
     ${step("s4", "4", "Plot and labels", "Axes, names, titles", `
       <div id="sl-plot"></div>
       <div class="field"><label for="manual">Highlight proteins</label><input id="manual" type="text" placeholder="Wdr5;Mll2" autocomplete="off" /><span class="help">Gene names separated by semicolons. Matches names that start with your text.</span></div>
       <div class="field"><label for="title">Plot title</label><input id="title" type="text" autocomplete="off" /></div>
-      <div class="field"><label for="bait-name">Bait name</label><input id="bait-name" type="text" autocomplete="off" /></div>`)}
+      <div class="field"><label for="bait-name">Bait name (gene)</label><input id="bait-name" type="text" autocomplete="off" /><span class="help">Shown in the title. Also used to check that the bait is enriched.</span></div>`)}
     ${step("s5", "+", "Stoichiometry", "", `
       <label class="check"><input id="stoich" type="checkbox" /> <span>Estimate abundance relative to the bait</span></label>
       <div id="stoichOpts" hidden style="display:grid;gap:12px">
         <div class="field"><label for="organism">Organism</label><select id="organism"></select></div>
-        <div class="field"><label for="stoichBait">Bait protein</label><input id="stoichBait" type="text" placeholder="Gene name or UniProt accession" autocomplete="off" /></div>
+        <div class="field"><label for="stoichBait">Bait protein</label><input id="stoichBait" type="text" placeholder="Defaults to the bait name above" autocomplete="off" /></div>
         <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">iBAQ style, as in the 2016 paper. Peptide counts come from UniProt Swiss-Prot and follow the standard rule of no cleavage before proline, so values can differ from the original tool.</p>
       </div>`, { optional: true })}
     ${step("s6", "+", "Experimental methods", "", `
       <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">New in version 2, not part of the 2016 publication and not peer reviewed. Compare with an established tool before relying on them.</p>
       <div class="field"><label for="mode">Cutoff method</label><select id="mode"><option value="hyperbola">Hyperbolic curve (as published)</option><option value="perm">Permutation FDR (Perseus style)</option><option value="bh">Benjamini-Hochberg q value</option></select></div>
       <div id="sl-exp"></div>
-      <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">Permutation FDR assumes samples are interchangeable. With few replicates there are only a handful of label shuffles (4 vs 4 gives 69), and it can call more proteins than the published curve when many background proteins differ slightly between groups.</p>
-      <div class="field"><label for="imputation">Missing value imputation</label><select id="imputation"><option value="normal">Shifted normal (as published)</option><option value="mindet">MinDet: low quantile of each column</option><option value="minprob">MinProb: random draw around low quantile</option></select></div>`, { exp: true })}
+      <p class="help" style="font-size:.78rem;color:var(--color-ink-3)">Permutation FDR assumes samples are interchangeable. With few replicates there are only a handful of label shuffles (4 vs 4 gives 69), and it can call more proteins than the published curve when many background proteins differ slightly between groups.</p>`, { exp: true })}
     <div class="sidebar-foot"><button class="link-btn" id="reset" type="button">Reset cutoff and plot settings</button><button class="link-btn" id="share" type="button">Copy settings link</button></div>
   </aside>
 
@@ -131,7 +138,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <section class="hero" id="hero">
       <div style="display:grid;gap:var(--space-4)">
         <h2>See what binds your bait</h2>
-        <p class="lede">Turn a MaxQuant label free interactomics run into a volcano plot and a ranked list of interactors. Choose bait and control, tune the cutoff, export the figure.</p>
+        <p class="lede">Turn a label free interactomics run (MaxQuant, FragPipe, DIA-NN and more) into a volcano plot and a ranked list of interactors. Choose bait and control, tune the cutoff, check quality, export the figure.</p>
         <div class="cta">
           <button class="btn primary" id="hero-browse" type="button">${ICON.upload}Choose a file</button>
           <button class="btn" id="hero-example" type="button">${ICON.flask}Try an example dataset</button>
@@ -140,7 +147,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       </div>
       ${heroArt()}
       <div class="how">
-        <div><b>Add proteinGroups.txt</b><span>Reverse hits and contaminants are removed for you.</span></div>
+        <div><b>Add your protein table</b><span>Reverse hits and contaminants are removed for you.</span></div>
         <div><b>Pick bait and control</b><span>Replicates are grouped by name. One click per group.</span></div>
         <div><b>Tune and export</b><span>Move the curve until the real interactors separate. Save PNG, SVG or CSV.</span></div>
       </div>
@@ -158,18 +165,20 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
               <button id="png" type="button">${ICON.download}Figure as PNG</button>
               <button id="svg" type="button">${ICON.download}Figure as SVG</button>
               <button id="csv" type="button">${ICON.download}Interactors as CSV</button>
+              <button id="csvp" type="button">${ICON.download}Present-only list as CSV</button>
               <button id="copy" type="button">${ICON.copy}Copy gene list</button>
             </div>
           </details>
         </header>
         <div id="plot" role="group" aria-label="Interactive volcano plot. Hover points to see gene names. The interactors are listed in the table below."></div>
-        <div class="legend-key" id="legend"><span><i style="background:var(--plot-hit)"></i>Significant</span><span><i style="background:var(--plot-point)"></i>Other proteins</span><span><i class="d" style="background:var(--plot-pick)"></i>Highlighted</span><span id="legend-cutoff"><i class="l"></i>Cutoff</span></div>
+        <div class="legend-key" id="legend"><span><i style="background:var(--plot-hit)"></i>Significant</span><span><i style="background:var(--plot-point)"></i>Other proteins</span><span><i class="h"></i>Hollow: includes a filled-in value</span><span><i class="d" style="background:var(--plot-pick)"></i>Highlighted</span><span id="legend-cutoff"><i class="l"></i>Cutoff</span></div>
         <div class="notes" id="notes"></div>
       </div>
       <div class="card" style="margin-top:var(--space-4)">
         <div class="subtabs" role="tablist" aria-label="Results views">
           <button role="tab" id="tab-hits" aria-selected="true" aria-controls="panel-hits" tabindex="0" type="button">Interactors <span id="hit-count" class="num"></span></button>
-          <button role="tab" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Replicates <span class="pill exp" style="margin-left:4px">Experimental</span><span id="qc-dot"></span></button>
+          <button role="tab" id="tab-presence" aria-selected="false" aria-controls="panel-presence" tabindex="-1" type="button">Present only in bait <span id="presence-count" class="num"></span></button>
+          <button role="tab" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Quality checks <span id="qc-dot"></span></button>
         </div>
         <div id="panel-hits" role="tabpanel" aria-labelledby="tab-hits">
           <div class="toolbar">
@@ -177,10 +186,15 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
             <span class="spacer" style="flex:1"></span>
             <button class="btn small" id="copy2" type="button">${ICON.copy}Copy genes</button>
           </div>
-          <div class="tablewrap" id="hits"></div>
+          <div class="tablewrap" id="hits" tabindex="0" role="region" aria-label="Interactors table, scrollable"></div>
+        </div>
+        <div id="panel-presence" role="tabpanel" aria-labelledby="tab-presence" hidden>
+          <div class="callout info" style="margin:14px;border-radius:var(--radius-m)">${ICON.info}<span><b>Seen in bait, never in a control.</b> These proteins were quantified in at least 2 bait replicates and in none of the control replicates. Control values are missing by design, so no p value is computed. They are ranked by how many bait replicates saw them, then by signal. In many pull downs these are the strongest candidates. <span class="pill new">New in v2</span></span></div>
+          <div class="toolbar"><span class="spacer" style="flex:1"></span><button class="btn small" id="copy3" type="button">${ICON.copy}Copy genes</button><button class="btn small" id="csvp2" type="button">${ICON.download}CSV</button></div>
+          <div class="tablewrap" id="presenceTable" tabindex="0" role="region" aria-label="Present only in bait table, scrollable"></div>
         </div>
         <div id="panel-qc" role="tabpanel" aria-labelledby="tab-qc" hidden>
-          <div class="tablewrap" style="padding:10px 14px" id="qcTable"></div>
+          <div id="qcBody"></div>
         </div>
       </div>
     </section>
@@ -200,7 +214,7 @@ const DEFAULT_NUM = { minFoldChange: defaultParams.minFoldChange, curvature: def
 // Exports always use this palette so a figure saved in dark mode is still print ready.
 const LIGHT_PLOT = { ink: "#1f2430", grid: "#e9ecf1", axis: "#5b6577", bg: "#ffffff", point: "#7b879c", hit: "#d94a2b", pick: "#0e8a86", curve: "#5b6577" };
 
-interface Saved { n?: Record<string, number>; r?: Record<string, Role>; x?: string[]; m?: string; t?: string; i?: string; man?: string; ti?: string; b?: string; so?: boolean; sg?: string; sb?: string }
+interface Saved { pr?: string; n?: Record<string, number>; r?: Record<string, Role>; x?: string[]; m?: string; t?: string; i?: string; man?: string; ti?: string; b?: string; so?: boolean; sg?: string; sb?: string }
 
 const state = {
   table: null as Table | null,
@@ -220,7 +234,12 @@ const state = {
   sort: { key: "x", dir: -1 as 1 | -1 },
   filter: "",
   pending: null as Saved | null,
+  fmt: null as { label: string; note?: string } | null,
+  clean: ((c: string) => c) as (c: string) => string,
   rowsShown: 25,
+  pca: null as PcaResult | null,
+  baseChecks: [] as Check[],
+  pcaNames: [] as string[],
   num: { ...DEFAULT_NUM },
 };
 
@@ -330,21 +349,12 @@ function schedule(kind: "compute" | "draw") {
     if (full) compute(); else void draw();
   }, 120);
 }
-for (const id of ["test", "imputation", "mode"]) $(id).addEventListener("input", () => schedule("compute"));
+for (const id of ["test", "imputation", "mode", "presence"]) $(id).addEventListener("input", () => schedule("compute"));
 for (const id of ["manual", "title", "bait-name"]) $(id).addEventListener("input", () => schedule("draw"));
 
 /* ---------- Data loading ---------- */
 
 const paint = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-
-function diagnose(table: Table): string {
-  const cols = table.columns.join("\n");
-  if (/Protein\.Group/i.test(cols) && !/lfq/i.test(cols)) return "This looks like a DIA-NN report.";
-  if (/PG\.ProteinGroups/i.test(cols)) return "This looks like a Spectronaut report.";
-  if (/MaxLFQ Intensity/i.test(cols) && /Combined|Protein Probability/i.test(cols)) return "This looks like a FragPipe report.";
-  if (/^Intensity\b/im.test(cols) && !/lfq/i.test(cols)) return "This looks like a MaxQuant file without LFQ columns. Run MaxQuant again with LFQ switched on.";
-  return "";
-}
 
 let prevChip = { html: "", hidden: true };
 // A failed load must not leave the user guessing which file the plot belongs to.
@@ -374,16 +384,17 @@ function loadText(text: string, name: string, preset?: { baitName: string }) {
     return;
   }
   if (lfq.length < 4) {
-    const why = diagnose(table);
-    fail(`${why ? why + " " : ""}Found ${lfq.length} columns with "LFQ" in the name. msVolcano needs at least 4 (two bait and two control replicates) from a MaxQuant proteinGroups.txt.`);
+    const why = explainUnsupported(table);
+    fail(`${why ? why + " " : ""}Found ${lfq.length} sample columns. msVolcano needs at least 4 (two bait and two control replicates). It reads MaxQuant, FragPipe, DIA-NN, Spectronaut and Proteome Discoverer tables, Perseus matrices, and plain tables of numbers.`);
     return;
   }
-  const groups = groupColumns(lfq);
+  const detected = detectFormat(table)!;
+  const groups = groupColumns(lfq, detected.clean);
   if (groups.length < 2) {
     fail(`Only one group of LFQ columns was found (${groups[0].name}). You need at least two: one bait and one control.`);
     return;
   }
-  state.table = table; state.fileName = name; state.fitAxes = true; state.result = null;
+  state.table = table; state.fileName = name; state.clean = detected.clean; state.fmt = { label: detected.label, note: detected.note }; state.fitAxes = true; state.result = null;
   state.groups = groups;
   // Only the first obvious bait and the first obvious control are pre-selected, so unrelated groups are never pooled silently.
   const seen = { bait: false, control: false };
@@ -394,6 +405,10 @@ function loadText(text: string, name: string, preset?: { baitName: string }) {
   const chip = $("filechip");
   chip.hidden = false;
   chip.innerHTML = `<b>${esc(name)}</b><span class="num">${table.rows.length.toLocaleString()} proteins</span>`;
+  const fmt = detectFormat(table);
+  const note = $("fmt-note");
+  note.hidden = !fmt;
+  note.textContent = fmt ? `Detected: ${fmt.label}.${fmt.note ? " " + fmt.note : ""}` : "";
   ($("bait-name") as HTMLInputElement).value = preset?.baitName ?? ($("bait-name") as HTMLInputElement).value;
   $("replace").hidden = false;
   $("tool-view").classList.add("has-data");
@@ -500,6 +515,8 @@ function currentParams(): Params {
     bait, control, welch: ($("test") as HTMLSelectElement).value === "welch",
     shift: state.num.shift, shrink: state.num.shrink, minFoldChange: state.num.minFoldChange, curvature: state.num.curvature, seed: defaultParams.seed,
     imputation: ($("imputation") as HTMLSelectElement).value as Params["imputation"],
+    presence: ($("presence") as HTMLSelectElement).value as Params["presence"],
+    presenceMin: 2,
   };
 }
 
@@ -540,11 +557,12 @@ function compute() {
     state.result = computeVolcano(state.table, p);
     state.params = p;
     state.perm = null;
-    if (($("mode") as HTMLSelectElement).value === "perm") {
+    if (($("mode") as HTMLSelectElement).value === "perm" && p.imputation !== "none") {
       state.perm = permutationFdr(state.result.proteins, p.bait.length, state.num.s0, state.num.fdr, state.num.perms, p.seed);
     }
     markStep("s2", true, `${p.bait.length} vs ${p.control.length} replicates${nb > 1 || nc > 1 ? ", pooled" : ""}`);
     renderQc(state.result);
+    renderPresence();
     void updateStoich();
     if (state.fitAxes) {
       // Fit the axes to the data once per file; the user can still adjust the limits afterwards.
@@ -590,8 +608,9 @@ const MODE_LABEL: Record<string, string> = { hyperbola: "Hyperbolic curve", perm
 function modeSummary(mode: string): string {
   const imp = ($("imputation") as HTMLSelectElement).value;
   const base = mode === "perm" ? `s0 ${state.num.s0}, FDR ${state.num.fdr} (experimental)` : mode === "bh" ? `BH q < ${state.num.qcut} (experimental)` : `min enrichment ${state.num.minFoldChange}, curvature ${state.num.curvature}`;
-  const impText = imp === "normal" ? `fill-in shift ${state.num.shift}, spread ${state.num.shrink}` : `${imp} imputation (experimental)`;
-  return `msVolcano ${__APP_VERSION__} | ${($("test") as HTMLSelectElement).value === "welch" ? "Welch" : "Student"} t-test | ${base} | ${impText}`;
+  const impText = imp === "normal" ? `fill-in shift ${state.num.shift}, spread ${state.num.shrink}` : imp === "none" ? "no fill-in" : `${imp} imputation (experimental)`;
+  const pres = ($("presence") as HTMLSelectElement).value === "separate" ? "bait-only proteins listed separately" : "bait-only proteins filled in";
+  return `msVolcano ${__APP_VERSION__} | ${($("test") as HTMLSelectElement).value === "welch" ? "Welch" : "Student"} t-test | ${base} | ${impText} | ${pres}`;
 }
 
 async function draw(forceLight = false) {
@@ -600,6 +619,7 @@ async function draw(forceLight = false) {
   showState("results");
   const p = { ...state.params, minFoldChange: state.num.minFoldChange, curvature: state.num.curvature };
   const mode = ($("mode") as HTMLSelectElement).value;
+  void renderPca();
   const qv = mode === "bh" ? benjaminiHochberg(r.proteins.map((q) => 10 ** -q.y)) : [];
   const prot = r.proteins.map((q, i) => ({
     ...q,
@@ -631,13 +651,22 @@ async function draw(forceLight = false) {
   const manualPos = placer(manualHits);
   const labelPos = placer(labelled);
   const hiddenLabels = labelPos.filter((x) => !x).length;
-  const trace = (pts: typeof prot, color: string, size: number | number[], text: boolean, opacity: number, symbol = "circle", pos: string[] = []) => ({
-    type: "scattergl", mode: text ? "markers+text" : "markers",
-    x: pts.map((q) => q.x), y: pts.map((q) => q.y),
-    text: pts.map((q, i) => (pos[i] ? q.gene : "")), textposition: pos.map((x) => x || "top right"), textfont: { size: labelSize, color: c.ink }, cliponaxis: false,
-    customdata: pts.map((q) => [q.id, q.gene]), hovertemplate: "<b>%{customdata[1]}</b><br>%{customdata[0]}<br>difference %{x:.2f}<br>-log10 p %{y:.2f}<extra></extra>",
-    marker: { color, size, opacity, symbol, line: { color: c.bg, width: symbol === "circle" && color === c.point ? 0 : 1.2 } },
-  });
+  const filledOf = (q: { imputed: boolean[] }) => q.imputed.filter(Boolean).length;
+  // Points that rest on at least one filled-in value are drawn hollow so they are never mistaken for fully measured ones.
+  const trace = (pts: typeof prot, color: string, size: number | number[], text: boolean, opacity: number, symbol = "circle", pos: string[] = [], hollowAware = true) => {
+    const hollow = pts.map((q) => hollowAware && filledOf(q) > 0);
+    return {
+      type: "scattergl", mode: text ? "markers+text" : "markers",
+      x: pts.map((q) => q.x), y: pts.map((q) => q.y),
+      text: pts.map((q, i) => (pos[i] ? q.gene : "")), textposition: pos.map((x) => x || "top right"), textfont: { size: labelSize, color: c.ink }, cliponaxis: false,
+      customdata: pts.map((q) => [q.id, q.gene, filledOf(q) ? `${filledOf(q)} of ${q.imputed.length} values filled in` : "all values measured"]),
+      hovertemplate: "<b>%{customdata[1]}</b><br>%{customdata[0]}<br>difference %{x:.2f}<br>-log10 p %{y:.2f}<br>%{customdata[2]}<extra></extra>",
+      marker: {
+        color: pts.map((_, i) => (hollow[i] ? "rgba(0,0,0,0)" : color)), size, opacity, symbol,
+        line: { color: pts.map((_, i) => (hollow[i] ? color : c.bg)), width: pts.map((_, i) => (hollow[i] ? 1.7 : symbol === "circle" && color === c.point ? 0 : 1.2)) },
+      },
+    };
+  };
   const line = (pts: { x: number; y: number }[]) => ({ type: "scatter", mode: "lines", x: pts.map((q) => q.x), y: pts.map((q) => q.y), line: { color: c.curve, dash: "dash", width: 1.3 }, hoverinfo: "skip", showlegend: false });
 
   const title = ($("title") as HTMLInputElement).value;
@@ -660,7 +689,7 @@ async function draw(forceLight = false) {
     trace(rest, c.point, 6, false, 0.6),
     trace(hits, c.hit, hits.map(hitSize), false, 0.95),
     trace(labelled, c.hit, labelled.map(hitSize), true, 0.95, "circle", labelPos),
-    trace(manualHits, c.pick, 12, true, 1, "diamond", manualPos),
+    trace(manualHits, c.pick, 12, true, 1, "diamond", manualPos, false),
     ...(mode === "hyperbola" ? [line(curve.right), line(curve.left)] : []),
   ], layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d", "toImage"] });
   if (forceLight) return;
@@ -668,8 +697,12 @@ async function draw(forceLight = false) {
   // Summary
   const d = r.dropped;
   const removed = d.contaminantOrReverse + d.absentInBait + d.untestable;
+  const nPresence = r.presenceOnly.length;
+  const filledHits = hits.filter((q) => filledOf(q) > 0).length;
+  $("stats").classList.toggle("four", nPresence > 0);
   $("stats").innerHTML = `
-    <div class="stat hit"><span>Significant interactors</span><b>${hits.length.toLocaleString()}</b><small>${prot.length ? ((hits.length / prot.length) * 100).toFixed(1) : "0"}% of ${prot.length.toLocaleString()} proteins tested</small></div>
+    <div class="stat hit"><span>Significant interactors</span><b>${hits.length.toLocaleString()}</b><small>${prot.length ? ((hits.length / prot.length) * 100).toFixed(1) : "0"}% of ${prot.length.toLocaleString()} proteins tested${filledHits ? `. ${filledHits} rely on a filled-in value (hollow).` : ""}</small></div>
+    ${nPresence ? `<div class="stat"><span>Present only in bait</span><b>${nPresence.toLocaleString()}</b><small>listed separately, no p value</small></div>` : ""}
     <div class="stat"><span>Proteins tested</span><b>${prot.length.toLocaleString()}</b><small>from ${table.rows.length.toLocaleString()} rows</small></div>
     <div class="stat"><span>Removed</span><b>${removed.toLocaleString()}</b><small>${d.contaminantOrReverse} contaminant or reverse, ${d.absentInBait} absent in bait${d.untestable ? `, ${d.untestable} untestable` : ""}</small></div>`;
   $("plot-title").textContent = baitName ? `Volcano plot: ${baitName}` : "Volcano plot";
@@ -678,10 +711,14 @@ async function draw(forceLight = false) {
   $("mbar-count").textContent = `${hits.length} interactors`;
   $("mbar").hidden = false;
   const notes: string[] = [];
-  if (r.logTransformed) notes.push("LFQ values looked unlogged and were log2 transformed.");
+  if (state.fmt) notes.push(`Input: ${state.fmt.label}.${state.fmt.note ? " " + state.fmt.note : ""}`);
+  if (r.logTransformed) notes.push("Intensities looked unlogged and were log2 transformed.");
   if (mode === "perm") notes.push(state.perm ? `Experimental: permutation FDR ${state.perm.fdr}, ${state.perm.permutations} permutations, score threshold ${state.perm.threshold.toFixed(2)}. Proteins can be called inside the funnel because each one is scored on its own variability, not by the fixed curve.` : "Experimental: not enough replicates for permutation FDR.");
   if (mode === "bh") notes.push(`Experimental: Benjamini-Hochberg q below ${state.num.qcut}, enriched side only.`);
-  if (($("imputation") as HTMLSelectElement).value !== "normal") notes.push("Experimental imputation method in use.");
+  if (($("imputation") as HTMLSelectElement).value === "none") notes.push("Missing values were not filled in. Each test uses only the measured values, so proteins with fewer than two per group are not tested.");
+  else if (($("imputation") as HTMLSelectElement).value !== "normal") notes.push("Experimental imputation method in use.");
+  if (nPresence) notes.push(`${nPresence} protein${nPresence > 1 ? "s were" : " was"} seen in bait but in no control and set aside from the volcano. See "Present only in bait".`);
+  if (mode === "perm" && ($("imputation") as HTMLSelectElement).value === "none") notes.push("Permutation FDR needs filled-in values, so it did not run. Choose an imputation method in step 3.");
   if (hits.length > labelLimit) notes.push(`Showing labels for the top ${labelLimit} of ${hits.length} interactors.${narrow ? " On phones labels are limited to 5." : ' Change "Labels shown" in step 4, or use the table.'}`);
   if (hiddenLabels) notes.push(`${hiddenLabels} label${hiddenLabels > 1 ? "s were" : " was"} left off to avoid overlaps. Hover a point to see its name, or use the table.`);
   const pooledB = state.groups.filter((g) => state.roles.get(g.name) === "bait").length, pooledC = state.groups.filter((g) => state.roles.get(g.name) === "control").length;
@@ -704,14 +741,15 @@ function renderHits() {
   const f = state.filter.trim().toLowerCase();
   const rows = hits.filter((q) => !f || q.gene.toLowerCase().includes(f) || q.id.toLowerCase().includes(f));
   const key = state.sort.key;
-  const val = (q: (typeof hits)[number]): number | string => key === "gene" ? q.gene.toLowerCase() : key === "id" ? q.id : key === "y" ? q.y : key === "q" ? (q.q ?? 0) : key === "st" ? (state.stoich.get(q.row) ?? -Infinity) : q.x;
+  const filled = (q: { imputed: boolean[] }) => q.imputed.filter(Boolean).length;
+  const val = (q: (typeof hits)[number]): number | string => key === "gene" ? q.gene.toLowerCase() : key === "id" ? q.id : key === "y" ? q.y : key === "q" ? (q.q ?? 0) : key === "fi" ? filled(q) : key === "st" ? (state.stoich.get(q.row) ?? -Infinity) : q.x;
   rows.sort((a, b) => { const A = val(a), B = val(b); return (A < B ? -1 : A > B ? 1 : 0) * state.sort.dir; });
   const th = (k: string, label: string, tip: string, num = false) => `<th class="${num ? "num" : ""}" title="${esc(tip)}" aria-sort="${key === k ? (state.sort.dir === 1 ? "ascending" : "descending") : "none"}"><button type="button" data-sort="${k}">${label}${key === k ? `<span aria-hidden="true">${state.sort.dir === 1 ? " ↑" : " ↓"}</span>` : ""}</button></th>`;
   if (!hits.length) {
     const advice = mode === "hyperbola" ? "Lower the minimum enrichment or curvature in step 3." : mode === "perm" ? "Raise the FDR or lower s0 in Experimental methods." : "Raise the q value cutoff in Experimental methods.";
     $("hits").innerHTML = `<div class="callout" style="margin:14px;border:0">${ICON.info}<span>No proteins pass the cutoff. ${advice}</span></div>`; return;
   }
-  $("hits").innerHTML = `<table><thead><tr>${th("gene", "Gene", "Gene name")}${th("id", "Protein ID", "First majority protein ID")}${th("x", "log2 difference", "Mean log2 LFQ in bait minus control", true)}${th("y", "-log10 p", "Higher means stronger evidence", true)}${showQ ? th("q", "q value", "Benjamini-Hochberg adjusted p value", true) : ""}${showSt ? th("st", "Stoichiometry", "Relative to the bait, which is 1", true) : ""}</tr></thead><tbody>${rows.slice(0, state.rowsShown).map((q) => `<tr><td class="gene">${esc(q.gene)}</td><td>${esc(q.id)}</td><td class="num">${q.x.toFixed(2)}</td><td class="num">${q.y.toFixed(2)}</td>${showQ ? `<td class="num">${(q.q ?? 0).toExponential(1)}</td>` : ""}${showSt ? `<td class="num">${fmtSt(state.stoich.get(q.row))}</td>` : ""}</tr>`).join("")}</tbody></table>${rows.length > state.rowsShown ? `<div class="notes" style="display:flex;gap:12px;align-items:center">Showing ${state.rowsShown} of ${rows.length}. <button class="btn small" id="more" type="button">Show 50 more</button></div>` : ""}`;
+  $("hits").innerHTML = `<table><thead><tr>${th("gene", "Gene", "Gene name")}${th("id", "Protein ID", "First majority protein ID")}${th("x", "log2 difference", "Mean log2 LFQ in bait minus control", true)}${th("y", "-log10 p", "Higher means stronger evidence", true)}${th("fi", "Filled in", "Replicates where the value was missing and was filled in. 0 means every value was measured.", true)}${showQ ? th("q", "q value", "Benjamini-Hochberg adjusted p value", true) : ""}${showSt ? th("st", "Stoichiometry", "Relative to the bait, which is 1", true) : ""}</tr></thead><tbody>${rows.slice(0, state.rowsShown).map((q) => `<tr><td class="gene">${esc(q.gene)}</td><td>${esc(q.id)}</td><td class="num">${q.x.toFixed(2)}</td><td class="num">${q.y.toFixed(2)}</td><td class="num">${filled(q) ? `${filled(q)} of ${q.imputed.length}` : "0"}</td>${showQ ? `<td class="num">${(q.q ?? 0).toExponential(1)}</td>` : ""}${showSt ? `<td class="num">${fmtSt(state.stoich.get(q.row))}</td>` : ""}</tr>`).join("")}</tbody></table>${rows.length > state.rowsShown ? `<div class="notes" style="display:flex;gap:12px;align-items:center">Showing ${state.rowsShown} of ${rows.length}. <button class="btn small" id="more" type="button">Show 50 more</button></div>` : ""}`;
   $("more")?.addEventListener("click", () => { state.rowsShown += 50; renderHits(); });
   $("hits").querySelectorAll<HTMLButtonElement>("button[data-sort]").forEach((b) => b.addEventListener("click", () => {
     const k = b.dataset.sort!;
@@ -721,42 +759,143 @@ function renderHits() {
 }
 $("hit-filter").addEventListener("input", (e) => { state.filter = (e.target as HTMLInputElement).value; state.rowsShown = 25; renderHits(); });
 
+function renderPresence() {
+  const r = state.result;
+  if (!r) return;
+  const rows = r.presenceOnly;
+  $("presence-count").textContent = `(${rows.length})`;
+  if (!rows.length) {
+    $("presenceTable").innerHTML = `<div class="callout" style="margin:14px;border:0">${ICON.info}<span>${($("presence") as HTMLSelectElement).value === "include" ? "Bait-only proteins are being filled in and tested, as in the published method. Switch step 3, Advanced, to list them separately." : "No protein was seen in two or more bait replicates and in no control."}</span></div>`;
+    return;
+  }
+  const shown = rows.slice(0, 200);
+  $("presenceTable").innerHTML = `<table><thead><tr><th>Gene</th><th>Protein ID</th><th class="num" title="Bait replicates with a value">Seen in</th><th class="num" title="Mean log2 intensity over the bait replicates that have a value">Mean log2 in bait</th></tr></thead><tbody>${shown.map((q) => `<tr><td class="gene">${esc(q.gene)}</td><td>${esc(q.id)}</td><td class="num">${q.nObs} of ${q.nBait}</td><td class="num">${q.meanLog2.toFixed(2)}</td></tr>`).join("")}</tbody></table>${rows.length > shown.length ? `<div class="notes">Showing the first ${shown.length} of ${rows.length}. Export the CSV for the full list.</div>` : ""}`;
+}
+
+const checkIcon = (st: Check["status"]) => (st === "ok" ? svg('<path d="m5 12 5 5 9-10"/>', 'width="16" height="16"') : st === "warn" ? svg('<path d="M12 9v4M12 17h.01"/><circle cx="12" cy="12" r="10"/>', 'width="16" height="16"') : svg('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>', 'width="16" height="16"'));
+
 function renderQc(r: VolcanoResult) {
   const p = state.params!;
-  const shorten = (n: string) => { const s = n.replace(/^LFQ intensity /i, ""); return s.length > 18 ? `${s.slice(0, 8)}...${s.slice(-7)}` : s; };
+  const shorten = (n: string) => { const s = state.clean(n); return s.length > 18 ? `${s.slice(0, 8)}...${s.slice(-7)}` : s; };
   const names = [...p.bait, ...p.control].map(shorten);
-  const c = replicateCorrelation(r.proteins);
+  state.pcaNames = names;
   const nb = p.bait.length;
-  // Lowest correlation between two replicates of the same group.
+  const c = observedCorrelation(r.proteins);
+
+  // Replicate agreement: the lowest correlation between two replicates of the same group, from measured values only.
   let worst = 1, worstPair = "";
-  const scan = (lo: number, hi: number) => { for (let i = lo; i < hi; i++) for (let j = i + 1; j < hi; j++) if (c[i][j] < worst) { worst = c[i][j]; worstPair = `${names[i]} and ${names[j]}`; } };
+  const scan = (lo: number, hi: number) => { for (let i = lo; i < hi; i++) for (let j = i + 1; j < hi; j++) if (Number.isFinite(c[i][j]) && c[i][j] < worst) { worst = c[i][j]; worstPair = `${names[i]} and ${names[j]}`; } };
   scan(0, nb); scan(nb, names.length);
-  const bad = worst < 0.8;
-  const verdict = bad
-    ? `Check your replicates: ${worstPair} agree only moderately (r = ${worst.toFixed(2)}). One may be an outlier. You can untick it in step 2.`
-    : `Replicates agree well. The lowest correlation within a group is ${worst.toFixed(2)}.`;
-  // Scale the tint from the lowest value in the matrix to 1 so small differences between replicates stay visible.
-  const minOff = Math.min(...c.flatMap((row, i) => row.filter((_, j) => j !== i)));
-  const cell = (v: number) => `style="background:color-mix(in oklch, var(--color-accent) ${Math.round(Math.max(0, Math.min(1, (v - minOff) / Math.max(1e-6, 1 - minOff))) * 40)}%, transparent)"`;
-  $("qcTable").innerHTML = `<div class="qc-verdict ${bad ? "warn" : ""}" style="margin:-10px -14px 10px">${bad ? ICON.alert.replace("<svg", '<svg width="18" height="18"') : ""}<span>${esc(verdict)}</span></div><table class="qc"><thead><tr><th></th>${names.map((n) => `<th scope="col">${esc(n)}</th>`).join("")}</tr></thead><tbody>${c.map((row, i) => `<tr><th scope="row">${esc(names[i])}</th>${row.map((v) => `<td ${cell(v)}>${v.toFixed(2)}</td>`).join("")}</tr>`).join("")}</tbody></table><p style="font-size:.82rem;color:var(--color-ink-2);margin-top:10px">Pearson correlation of imputed log2 LFQ values. Replicates of one condition should agree with each other more than with the other group. A deeper tint means a higher correlation, scaled from the lowest value shown to 1.</p>`;
-  $("qc-dot").innerHTML = bad ? '<span class="dot-warn" role="img" aria-label="Replicate warning"></span>' : "";
+  const agree: Check = worst < 0.8
+    ? { id: "agree", status: "warn", title: "Replicate agreement", detail: `${worstPair} agree only moderately (r = ${worst.toFixed(2)}). One may be an outlier. You can untick it in step 2.` }
+    : { id: "agree", status: "ok", title: "Replicate agreement", detail: `Replicates of the same group agree well. The lowest correlation within a group is ${worst.toFixed(2)}.` };
+  state.baseChecks = [agree, coverageCheck(r.coverage), loadingCheck(r.proteins, nb)];
+
+  const minOff = Math.min(...c.flatMap((row, i) => row.filter((v, j) => j !== i && Number.isFinite(v))));
+  const cell = (v: number) => `style="background:color-mix(in oklch, var(--color-accent) ${Number.isFinite(v) ? Math.round(Math.max(0, Math.min(1, (v - minOff) / Math.max(1e-6, 1 - minOff))) * 40) : 0}%, transparent)"`;
+  const bars = r.coverage.map((k, i) => { const f = k.total ? k.observed / k.total : 0; return `<tr><th scope="row">${esc(names[i])}</th><td style="width:60%"><div class="bar"><i style="width:${(f * 100).toFixed(1)}%"></i></div></td><td class="num">${(f * 100).toFixed(0)}%</td></tr>`; }).join("");
+  state.pca = samplePca(r.proteins);
+  const shift = state.num.shift;
+  $("qcBody").innerHTML = `
+    <div class="qc-section">
+      <div class="qc-head"><h3>Checks</h3><span class="pill new">New in v2</span></div>
+      <ul class="checks" id="checks"></ul>
+    </div>
+    <div class="qc-section">
+      <div class="qc-head"><h3>Sample map (PCA)</h3><span class="pill new">New in v2</span></div>
+      ${state.pca ? `<div id="pca"></div><p class="qc-note">Each dot is one sample. Bait and control replicates should form separate groups. Uses the ${state.pca.proteinsUsed.toLocaleString()} proteins measured in every sample, so filled-in values do not shape it.</p>` : `<p class="qc-note">Not enough proteins were measured in every sample to draw a PCA (it needs at least 10).</p>`}
+    </div>
+    <div class="qc-section">
+      <div class="qc-head"><h3>Replicate correlation</h3></div>
+      <div class="tablewrap" tabindex="0" role="region" aria-label="Replicate correlation table, scrollable">
+        <table class="qc"><thead><tr><th><span class="sr">Sample</span></th>${names.map((n) => `<th scope="col">${esc(n)}</th>`).join("")}</tr></thead><tbody>${c.map((row, i) => `<tr><th scope="row">${esc(names[i])}</th>${row.map((v) => `<td ${cell(v)}>${Number.isFinite(v) ? v.toFixed(2) : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <p class="qc-note">Pearson correlation of log2 intensities between samples, using proteins measured in both. A deeper tint means a higher correlation, scaled from the lowest value shown to 1.</p>
+    </div>
+    <div class="qc-section">
+      <div class="qc-head"><h3>Proteins with a value, per sample</h3></div>
+      <table class="cov"><tbody>${bars}</tbody></table>
+    </div>
+    <div class="qc-section">
+      <div class="qc-head"><h3>How much do the hits depend on the fill-in shift?</h3><span class="pill new">New in v2</span></div>
+      <p class="qc-note">Re-runs the analysis with the fill-in shift moved either side of ${shift} and compares the interactor lists, using the hyperbolic curve. A stable list means the result does not hinge on that setting.</p>
+      <div class="row-actions" style="padding:0 14px"><button class="btn small" id="run-sens" type="button">Run the check</button></div>
+      <div id="sens" style="padding:10px 14px"></div>
+    </div>`;
+  paintChecks();
+  $("run-sens").addEventListener("click", runSensitivity);
+}
+
+/** The bait check depends on the bait name, so it is repainted whenever that field changes. */
+function paintChecks() {
+  const r = state.result;
+  const list = document.getElementById("checks");
+  if (!r || !list) return;
+  const baitKey = (($("bait-name") as HTMLInputElement).value || ($("stoichBait") as HTMLInputElement).value).trim();
+  const checks: Check[] = [...state.baseChecks, baitRecovery(r.proteins, r.presenceOnly, baitKey)];
+  list.innerHTML = checks.map((k) => `<li class="check-row ${k.status}"><span class="ci" aria-hidden="true">${checkIcon(k.status)}</span><div><b>${esc(k.title)}</b><div>${esc(k.detail)}</div></div><span class="sr">${k.status === "ok" ? "Passed" : k.status === "warn" ? "Needs attention" : "Note"}</span></li>`).join("");
+  const warn = checks.filter((k) => k.status === "warn").length;
+  $("qc-dot").innerHTML = warn ? `<span class="dot-warn" role="img" aria-label="${warn} quality warning${warn > 1 ? "s" : ""}"></span>` : "";
+}
+for (const id of ["bait-name", "stoichBait"]) $(id).addEventListener("input", () => paintChecks());
+
+function runSensitivity() {
+  const out = $("sens");
+  if (!state.table || !state.params) return;
+  const pr = { ...state.params, minFoldChange: state.num.minFoldChange, curvature: state.num.curvature };
+  const base = pr.shift;
+  const shifts = [Math.max(0, +(base - 0.6).toFixed(2)), base, +(base + 0.6).toFixed(2)];
+  const rows = shiftSensitivity(state.table, pr, shifts);
+  if (!rows) { out.innerHTML = `<div class="callout">${ICON.info}<span>Nothing is filled in with the current method, so there is nothing to test.</span></div>`; return; }
+  const baseHits = rows.find((x) => x.base)!.hits;
+  const worstChange = Math.max(...rows.map((x) => x.lost + x.gained));
+  const stable = baseHits === 0 ? worstChange === 0 : worstChange / baseHits <= 0.1;
+  out.innerHTML = `<div class="qc-verdict ${stable ? "" : "warn"}" style="margin:0 0 10px;border:1px solid var(--color-line);border-radius:var(--radius-s)"><span>${stable ? "Stable. Moving the shift changes at most 10% of the interactor list." : `Sensitive. Moving the shift changes up to ${baseHits ? Math.round((worstChange / baseHits) * 100) : 0}% of the interactor list. Treat borderline hits with caution and check them against the measured values.`}</span></div>
+    <div class="tablewrap"><table><thead><tr><th class="num">Fill-in shift</th><th class="num">Interactors</th><th class="num">Shared with current</th><th class="num">Dropped</th><th class="num">Added</th></tr></thead><tbody>${rows.map((x) => `<tr><td class="num">${x.shift}${x.base ? " (current)" : ""}</td><td class="num">${x.hits}</td><td class="num">${x.shared}</td><td class="num">${x.lost}</td><td class="num">${x.gained}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+async function renderPca() {
+  const el = document.getElementById("pca");
+  if (!el || !state.pca || !state.params) return;
+  const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const ink = css("--plot-ink"), grid = css("--plot-grid"), axis = css("--plot-axis"), bg = css("--plot-bg");
+  const nb = state.params.bait.length;
+  const mk = (idx: number[], name: string, color: string, symbol: string) => ({
+    type: "scatter", mode: "markers+text", name, x: idx.map((i) => state.pca!.scores[i][0]), y: idx.map((i) => state.pca!.scores[i][1]),
+    text: idx.map((i) => state.pcaNames[i]), textposition: idx.map((_, k) => (k % 2 ? "bottom center" : "top center")), textfont: { size: 11, color: ink },
+    marker: { size: 11, color, symbol, line: { color: bg, width: 1.2 } },
+    hovertemplate: "%{text}<extra>" + name + "</extra>",
+  });
+  const all = state.pcaNames.map((_, i) => i);
+  const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+  await Plotly.react(el, [mk(all.filter((i) => i < nb), "Bait", css("--plot-hit"), "circle"), mk(all.filter((i) => i >= nb), "Control", css("--plot-curve"), "square")], {
+    font: { color: ink, family: "Geist Variable, system-ui, sans-serif", size: 12 },
+    xaxis: { title: { text: `PC1 (${pct(state.pca.explained[0])} of variance)` }, zeroline: false, gridcolor: grid, showline: true, linecolor: axis },
+    yaxis: { title: { text: `PC2 (${pct(state.pca.explained[1])})` }, zeroline: false, gridcolor: grid, showline: true, linecolor: axis },
+    showlegend: true, legend: { orientation: "h", y: 1.12 }, margin: { t: 30, r: 20, b: 50, l: 56 }, paper_bgcolor: bg, plot_bgcolor: bg, hovermode: "closest",
+  }, { responsive: true, displaylogo: false, displayModeBar: false });
 }
 
 /* ---------- Tabs ---------- */
 
-function selectTab(which: "hits" | "qc", focus = false) {
-  const hitsTab = which === "hits";
-  $("tab-hits").setAttribute("aria-selected", String(hitsTab)); $("tab-hits").tabIndex = hitsTab ? 0 : -1;
-  $("tab-qc").setAttribute("aria-selected", String(!hitsTab)); $("tab-qc").tabIndex = hitsTab ? -1 : 0;
-  $("panel-hits").hidden = !hitsTab; $("panel-qc").hidden = hitsTab;
-  if (focus) $(hitsTab ? "tab-hits" : "tab-qc").focus();
+type TabId = "hits" | "presence" | "qc";
+const TABS: TabId[] = ["hits", "presence", "qc"];
+function selectTab(which: TabId, focus = false) {
+  for (const t of TABS) {
+    $(`tab-${t}`).setAttribute("aria-selected", String(t === which));
+    $(`tab-${t}`).tabIndex = t === which ? 0 : -1;
+    $(`panel-${t}`).hidden = t !== which;
+  }
+  if (focus) $(`tab-${which}`).focus();
+  if (which === "qc") void renderPca();
 }
-$("tab-hits").addEventListener("click", () => selectTab("hits"));
-$("tab-qc").addEventListener("click", () => selectTab("qc"));
+for (const t of TABS) $(`tab-${t}`).addEventListener("click", () => selectTab(t));
 document.querySelector(".subtabs")!.addEventListener("keydown", (e) => {
   const k = (e as KeyboardEvent).key;
-  if (k === "ArrowRight" || k === "End") selectTab("qc", true);
-  else if (k === "ArrowLeft" || k === "Home") selectTab("hits", true);
+  const cur = TABS.findIndex((t) => $(`tab-${t}`).getAttribute("aria-selected") === "true");
+  if (k === "ArrowRight") selectTab(TABS[(cur + 1) % TABS.length], true);
+  else if (k === "ArrowLeft") selectTab(TABS[(cur + TABS.length - 1) % TABS.length], true);
+  else if (k === "Home") selectTab(TABS[0], true);
+  else if (k === "End") selectTab(TABS[TABS.length - 1], true);
 });
 
 /* ---------- Export ---------- */
@@ -779,11 +918,21 @@ $("csv").addEventListener("click", () => {
   const a = Object.assign(document.createElement("a"), { href: url, download: `${stem()}_hits.csv` });
   a.click(); URL.revokeObjectURL(url);
 });
-async function copyGenes() {
+async function copyGenes(list: { gene: string }[] = state.hits) {
   closeMenu();
-  const text = state.hits.map((q) => q.gene).join("\n");
-  try { await navigator.clipboard.writeText(text); toast(`Copied ${state.hits.length} gene names`); } catch { toast("Copy is blocked by the browser"); }
+  const text = list.map((q) => q.gene).join("\n");
+  try { await navigator.clipboard.writeText(text); toast(`Copied ${list.length} gene names`); } catch { toast("Copy is blocked by the browser"); }
 }
+function downloadPresence() {
+  closeMenu();
+  if (!state.table || !state.params || !state.result) return;
+  const url = URL.createObjectURL(new Blob([presenceCsv(state.table, state.result.presenceOnly, state.params)], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `${stem()}_present_only.csv` });
+  a.click(); URL.revokeObjectURL(url);
+}
+$("csvp").addEventListener("click", downloadPresence);
+$("csvp2").addEventListener("click", downloadPresence);
+$("copy3").addEventListener("click", () => void copyGenes(state.result?.presenceOnly ?? []));
 $("copy").addEventListener("click", () => void copyGenes());
 $("copy2").addEventListener("click", () => void copyGenes());
 $("mbar-adjust").addEventListener("click", () => { const st = $("s3") as HTMLDetailsElement; st.open = true; st.scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -797,7 +946,7 @@ function encodeSettings(): string {
   const saved: Saved = {
     n: { ...state.num }, r: Object.fromEntries([...state.roles].filter(([, v]) => v !== "off")), x: [...state.excluded],
     m: selVal("mode"), t: selVal("test"), i: selVal("imputation"), man: selVal("manual"), ti: selVal("title"), b: selVal("bait-name"),
-    so: ($("stoich") as HTMLInputElement).checked, sg: selVal("organism"), sb: selVal("stoichBait"),
+    so: ($("stoich") as HTMLInputElement).checked, sg: selVal("organism"), sb: selVal("stoichBait"), pr: selVal("presence"),
   };
   return btoa(unescape(encodeURIComponent(JSON.stringify(saved)))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -807,7 +956,7 @@ function decodeSettings(raw: string): Saved | null {
 function applySavedControls(s: Saved) {
   for (const [k, v] of Object.entries(s.n ?? {})) if (k in state.num && Number.isFinite(v)) setters[k as keyof typeof state.num]?.(v);
   const set = (id: string, v: string | undefined) => { if (v !== undefined) ($(id) as HTMLSelectElement | HTMLInputElement).value = v; };
-  set("mode", s.m); set("test", s.t); set("imputation", s.i); set("manual", s.man); set("title", s.ti); set("bait-name", s.b); set("stoichBait", s.sb);
+  set("mode", s.m); set("test", s.t); set("imputation", s.i); set("presence", s.pr); set("manual", s.man); set("title", s.ti); set("bait-name", s.b); set("stoichBait", s.sb);
   if (s.so) { ($("stoich") as HTMLInputElement).checked = true; $("stoichOpts").hidden = false; }
   if (s.sg) { pendingOrg = s.sg; if ($("organism").children.length) ($("organism") as HTMLSelectElement).value = s.sg; }
 }
@@ -827,7 +976,7 @@ $("share").addEventListener("click", async () => {
 $("reset").addEventListener("click", () => {
   for (const [k, v] of Object.entries(DEFAULT_NUM)) setters[k as keyof typeof state.num]?.(v);
   for (const id of ["manual", "title", "stoichBait"]) ($(id) as HTMLInputElement).value = "";
-  ($("mode") as HTMLSelectElement).value = "hyperbola"; ($("test") as HTMLSelectElement).value = "student"; ($("imputation") as HTMLSelectElement).value = "normal";
+  ($("mode") as HTMLSelectElement).value = "hyperbola"; ($("test") as HTMLSelectElement).value = "student"; ($("imputation") as HTMLSelectElement).value = "normal"; ($("presence") as HTMLSelectElement).value = "separate";
   ($("stoich") as HTMLInputElement).checked = false; $("stoichOpts").hidden = true;
   state.fitAxes = true;
   compute();

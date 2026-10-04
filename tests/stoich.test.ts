@@ -44,7 +44,7 @@ describe("parsePeptideTable", () => {
 });
 
 const prot = (row: number, gene: string, id: string, x: number, baitMean: number): Protein => ({
-  row, gene, id, x, y: 0, baitMean, se: 0, values: [], significant: false,
+  row, gene, id, x, y: 0, baitMean, se: 0, values: [], raw: [], imputed: [], significant: false,
 });
 
 describe("computeStoichiometry", () => {

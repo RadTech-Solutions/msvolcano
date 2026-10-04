@@ -3,6 +3,8 @@ export interface Table {
   rows: string[][];
   /** Perseus column types (E, N, T, C, M) when the file has a #!{Type} annotation row. */
   types?: string[];
+  /** Set by the interface when the user overrides format detection. */
+  forceFormat?: "generic";
 }
 
 /** Parse delimited text. Handles quoted fields and CRLF. */
@@ -41,5 +43,8 @@ export function parseDelimited(text: string, sep: string, quote = '"'): Table {
 
 export function sniffSeparator(text: string): string {
   const head = text.slice(0, 4096).split(/\r?\n/)[0] ?? "";
-  return (head.match(/\t/g)?.length ?? 0) >= (head.match(/,/g)?.length ?? 0) ? "\t" : ",";
+  const count = (c: string) => head.split(c).length - 1;
+  const [tab, semi, comma] = [count("\t"), count(";"), count(",")];
+  if (tab >= semi && tab >= comma) return "\t";
+  return semi > comma ? ";" : ",";
 }

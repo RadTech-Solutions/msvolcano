@@ -1,3 +1,4 @@
+import { isMissingToken, parseNumber, usesDecimalComma } from "./numbers";
 import type { Table } from "./parse";
 
 export type FormatId = "maxquant" | "fragpipe" | "diann" | "spectronaut" | "proteome-discoverer" | "perseus" | "generic";
@@ -6,6 +7,8 @@ export interface FormatInfo {
   id: FormatId;
   /** Human readable name shown in the interface. */
   label: string;
+  /** One or two words for tight spaces. */
+  short: string;
   /** Columns that hold one quantity per sample. */
   sampleColumns: string[];
   geneCol: number;
@@ -25,8 +28,10 @@ const stripExt = (c: string) => c.replace(/\.(raw|d|mzml|mzxml|wiff2?|dia|tdf|ht
 
 function numericColumn(t: Table, i: number): boolean {
   const sample = t.rows.slice(0, 200);
-  const vals = sample.map((r) => r[i]).filter((v) => v !== undefined && v !== "" && v !== "NaN" && v !== "Filtered" && v !== "NA");
-  return vals.length >= Math.max(1, sample.length * 0.2) && vals.every((v) => Number.isFinite(Number(v.replace(",", "."))));
+  const cells = sample.map((r) => r[i]);
+  const decimalComma = usesDecimalComma(cells);
+  const vals = cells.filter((v) => !isMissingToken(v));
+  return vals.length >= Math.max(1, sample.length * 0.2) && vals.every((v) => Number.isFinite(parseNumber(v, decimalComma)));
 }
 
 function maxquant(t: Table): FormatInfo | null {
@@ -37,7 +42,7 @@ function maxquant(t: Table): FormatInfo | null {
   const majority = find(t, /^majority.protein.ids?$/i);
   return {
     id: "maxquant",
-    label: "MaxQuant proteinGroups (LFQ)",
+    label: "MaxQuant proteinGroups (LFQ)", short: "MaxQuant",
     sampleColumns,
     geneCol: find(t, /^gene.?names?$/i),
     idCol: majority >= 0 ? majority : find(t, /^protein.ids?$/i),
@@ -48,11 +53,11 @@ function maxquant(t: Table): FormatInfo | null {
 
 function fragpipe(t: Table): FormatInfo | null {
   if (find(t, /^Protein ID$/) < 0 || find(t, /^Gene$/) < 0) return null;
-  let sampleColumns = t.columns.filter((c) => / MaxLFQ Intensity$/.test(c) && !/^Combined/.test(c));
+  let sampleColumns = t.columns.filter((c) => / MaxLFQ Intensity$/.test(c));
   let suffix = " MaxLFQ Intensity";
   let note = "Using the MaxLFQ intensity columns.";
   if (!sampleColumns.length) {
-    sampleColumns = t.columns.filter((c) => / Intensity$/.test(c) && !/(MaxLFQ|Unique|Total|Razor|Combined)/.test(c));
+    sampleColumns = t.columns.filter((c) => / Intensity$/.test(c) && !/ (MaxLFQ |MaxLFQ Unique |MaxLFQ Total |Unique |Total |Razor )Intensity$/.test(c));
     suffix = " Intensity";
     note = "No MaxLFQ columns found, so the plain Intensity columns are used. Enable MaxLFQ in FragPipe for better quantification.";
   }
@@ -60,7 +65,7 @@ function fragpipe(t: Table): FormatInfo | null {
   const proteinCol = find(t, /^Protein$/);
   const idCol = find(t, /^Protein ID$/);
   return {
-    id: "fragpipe", label: "FragPipe combined_protein.tsv", sampleColumns,
+    id: "fragpipe", label: "FragPipe combined_protein.tsv", short: "FragPipe", sampleColumns,
     geneCol: find(t, /^Gene$/), idCol,
     isFlagged: (r) => CONTAMINANT_ID.test(r[proteinCol] ?? "") || CONTAMINANT_ID.test(r[idCol] ?? ""),
     clean: (c) => (c.endsWith(suffix) ? c.slice(0, -suffix.length) : c),
@@ -68,7 +73,9 @@ function fragpipe(t: Table): FormatInfo | null {
   };
 }
 
-const DIANN_META = /^(Protein\.Group|Protein\.Ids|Protein\.Names|Genes|First\.Protein\.Description|N\.|.*sequences?|.*proteotypic)/i;
+// Exact names of the descriptive columns, plus the count columns newer versions add. Anchored so that a run
+// whose file path happens to contain "Sequences" or start with "N." is never mistaken for metadata.
+const DIANN_META = /^(Protein\.Group|Protein\.Ids|Protein\.Names|Genes|First\.Protein\.Description|N\.(All|Proteotypic)\.Sequences?|Number of .*|N\.Sequences?)$/i;
 
 function diann(t: Table): FormatInfo | null {
   if (find(t, /^Protein\.Group$/) < 0 || (find(t, /^Genes$/) < 0 && find(t, /^Protein\.Names$/) < 0)) return null;
@@ -76,7 +83,7 @@ function diann(t: Table): FormatInfo | null {
   if (!sampleColumns.length) return null;
   const idCol = find(t, /^Protein\.Group$/);
   return {
-    id: "diann", label: "DIA-NN report.pg_matrix.tsv (beta)", sampleColumns,
+    id: "diann", label: "DIA-NN report.pg_matrix.tsv (beta)", short: "DIA-NN (beta)", sampleColumns,
     geneCol: find(t, /^Genes$/), idCol,
     isFlagged: (r) => CONTAMINANT_ID.test(r[idCol] ?? ""),
     clean: (c) => stripExt(stripPath(c)),
@@ -90,7 +97,7 @@ function spectronaut(t: Table): FormatInfo | null {
   const sampleColumns = t.columns.filter((c) => /PG\.Quantity$/.test(c));
   if (!sampleColumns.length) return null;
   return {
-    id: "spectronaut", label: "Spectronaut protein group report (beta)", sampleColumns,
+    id: "spectronaut", label: "Spectronaut protein group report (beta)", short: "Spectronaut (beta)", sampleColumns,
     geneCol: find(t, /^PG\.Genes$/), idCol,
     isFlagged: (r) => CONTAMINANT_ID.test(r[idCol] ?? ""),
     clean: (c) => stripExt(c.replace(/^\[\d+\]\s*/, "").replace(/\.?PG\.Quantity$/, "")),
@@ -107,10 +114,10 @@ function proteomeDiscoverer(t: Table): FormatInfo | null {
   if (!sampleColumns.length) return null;
   const contCol = find(t, /^Contaminant$/i);
   return {
-    id: "proteome-discoverer", label: "Proteome Discoverer protein export (beta)", sampleColumns,
+    id: "proteome-discoverer", label: "Proteome Discoverer protein export (beta)", short: "Proteome Discoverer (beta)", sampleColumns,
     geneCol: find(t, /^Gene( Symbol)?$/i), idCol,
     isFlagged: (r) => contCol >= 0 && /^(true|\+|1|yes)$/i.test((r[contCol] ?? "").trim()),
-    clean: (c) => c.replace(/^Abundances? (\([^)]*\))?:\s*/i, "").replace(/^F\d+:\s*/i, ""),
+    clean: (c) => c.replace(/^Abundances?\s*(\([^)]*\))?:\s*/i, "").replace(/^F\d+:\s*/i, ""),
     note: `Using the ${which}. Written from documentation and not yet tested on many real files. Check the groups in step 2.`,
   };
 }
@@ -120,12 +127,12 @@ function perseus(t: Table): FormatInfo | null {
   const sampleColumns = t.columns.filter((_, i) => t.types![i] === "E");
   if (sampleColumns.length < 2) return null;
   return {
-    id: "perseus", label: "Perseus matrix", sampleColumns,
+    id: "perseus", label: "Perseus matrix", short: "Perseus", sampleColumns,
     geneCol: find(t, /^gene/i),
     idCol: find(t, /^(majority protein ids?|protein ids?|accession|uniprot)/i),
     isFlagged: () => false,
     clean: (c) => c.replace(/^LFQ intensity\s*/i, ""),
-    note: "The columns marked as Main in Perseus are used as samples.",
+    note: "The columns marked as Main in Perseus are used as samples. Check that only intensity columns are marked Main, and that missing values were not already filled in inside Perseus.",
   };
 }
 
@@ -138,12 +145,12 @@ function generic(t: Table): FormatInfo | null {
   const id = find(t, /^(protein|accession|uniprot|id)/i);
   return {
     id: "generic",
-    label: "Generic table (numeric columns as samples)",
+    label: "Generic table (numeric columns as samples)", short: "Plain table",
     sampleColumns,
     geneCol: find(t, /^gene/i),
     idCol: id >= 0 ? id : firstText,
     isFlagged: () => false,
-    clean: (c) => c,
+    clean: (c) => stripExt(stripPath(c)),
     note: "Format not recognised. Numeric columns are treated as sample intensities, so check the groups in step 2.",
   };
 }
@@ -152,6 +159,7 @@ const DETECTORS: ((t: Table) => FormatInfo | null)[] = [perseus, fragpipe, diann
 
 /** Detect the software that produced a protein table. Returns null when no sample columns can be found. */
 export function detectFormat(t: Table): FormatInfo | null {
+  if (t.forceFormat === "generic") return generic(t);
   for (const d of DETECTORS) {
     const f = d(t);
     if (f) return f;

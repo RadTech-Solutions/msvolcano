@@ -13,9 +13,9 @@ export const aboutHtml = `
   <ol>
     <li>Rows marked as reverse (decoy) hits or potential contaminants are removed.</li>
     <li>Proteins with no value in any bait replicate are removed.</li>
-    <li>Intensities that look unlogged are transformed to log2. A zero means "not quantified" and counts as missing.</li>
-    <li>Proteins seen in at least 2 bait replicates and in no control replicate are set aside in their own list (see "New in version 2" below). The 2016 tool filled their control values in and tested them.</li>
-    <li>Remaining missing values are filled in by drawing from a normal distribution shifted down from the group mean (<code>shift</code> times the standard deviation) and narrowed (<code>spread</code> times the standard deviation), which mimics low abundance proteins that fell below detection. The draw is seeded, so the same input gives the same plot. Points that rest on a filled-in value are drawn hollow.</li>
+    <li>Intensities are read as raw or as log2. msVolcano decides from the typical value, tells you what it decided under the plot, and lets you set it in step 3. In raw intensities a zero means "not quantified" and counts as missing. In log2 data an empty cell is missing.</li>
+    <li>Proteins seen in at least 2 bait replicates and not detected in any control replicate are set aside in their own list (see "New in version 2" below). Proteins with fewer than 2 measured values in both groups are left out, because they would be tested on filled-in values alone. The 2016 tool filled both kinds in and tested them.</li>
+    <li>Remaining missing values are filled in by drawing from a normal distribution shifted down from the group mean (<code>shift</code> times the standard deviation) and narrowed (<code>spread</code> times the standard deviation), which mimics low abundance proteins that fell below detection. As in 2016, bait and control each get their own distribution. Every filled-in value has its own seeded draw, so the same input always gives the same plot and changing a setting elsewhere does not reshuffle other proteins. Points that rest on a filled-in value are drawn hollow.</li>
     <li>A Student or Welch t-test is run for every protein, bait against control.</li>
     <li>The volcano plot shows the difference of the means (x) against the negative log10 p value (y). A protein is called significant when it lies to the right of the hyperbolic curve <code>y = curvature / (x - minFoldChange)</code>, which tightens the p value requirement for weakly enriched proteins and relaxes it for strongly enriched ones. This curve is a tuning device, not a calibrated false discovery rate.</li>
   </ol>
@@ -37,19 +37,30 @@ export const aboutHtml = `
   <h3>New in version 2 <span class="badge">Not in the 2016 paper</span></h3>
   <p>These additions follow what the field has learned since 2016. They change what you see, so they are described here. Each can be switched off or reverted to the published behaviour.</p>
   <ul>
-    <li><strong>Present only in bait.</strong> A protein found in at least 2 bait replicates and in no control is absent from the control by design, not by chance. A t-test on filled-in control values ranks it using numbers that were invented, and the result depends on the shift setting. Version 2 lists these proteins on their own tab, ranked by how many bait replicates saw them and by signal, with no p value. Imputation accuracy is driven mainly by how much of the missingness is "not at random" (<a href="https://doi.org/10.1038/s41598-021-81279-4">Jin et al. 2021</a>; <a href="https://doi.org/10.1021/acs.jproteome.5b00981">Lazar et al. 2016</a>). Choose "Fill in and test (as published)" in step 3, Advanced, to return to the 2016 behaviour.</li>
+    <li><strong>Present only in bait.</strong> A protein found in at least 2 bait replicates and not detected in any control is a strong candidate, but a t-test on filled-in control values ranks it using numbers that were invented, and the result depends on the shift setting. It can also be missing from the controls by chance, especially with few controls. Version 2 lists these proteins on their own tab, ranked by how many bait replicates saw them and by signal, with no p value. Imputation accuracy is driven mainly by how much of the missingness is "not at random" (<a href="https://doi.org/10.1038/s41598-021-81279-4">Jin et al. 2021</a>; <a href="https://doi.org/10.1021/acs.jproteome.5b00981">Lazar et al. 2016</a>). Choose "Fill in and test (as published)" in step 3, Advanced, to return to the 2016 behaviour.</li>
     <li><strong>Visible imputation.</strong> Points that include a filled-in value are hollow, the interactors table shows how many values were filled in, and a "Do not fill in" mode tests only the measured values. A sensitivity check re-runs the analysis at nearby shift values and tells you how much of the interactor list moves.</li>
     <li><strong>Quality checks.</strong> Replicate agreement from measured values only, a sample map (PCA), the share of proteins with a value in each sample, a loading balance check, and a bait recovery check (is the bait among the most enriched proteins?). These are warnings to look at, not statistical tests.</li>
   </ul>
 
   <h3>Experimental features</h3>
-  <p>Features marked <span class="badge">Experimental</span> are new in version 2. They are <strong>not part of the 2016 publication</strong>, have not been peer reviewed or benchmarked, and may change or disappear. They are offered as is, open for anyone to try, test and improve. Please check results from them against your own judgement and an established tool before drawing conclusions, and report problems on GitHub.</p>
+  <p>Two labels are used. "New in v2" marks additions that follow current good practice and are described above. <span class="badge">Experimental</span> marks statistical methods that are less settled. Both are new in version 2. They are <strong>not part of the 2016 publication</strong>, have not been peer reviewed or benchmarked, and may change or disappear. They are offered as is, open for anyone to try, test and improve. Please check results from them against your own judgement and an established tool before drawing conclusions, and report problems on GitHub.</p>
   <ul>
     <li><strong>s0 score with permutation FDR (Perseus style).</strong> Scores each protein as the difference divided by its standard error plus a fudge factor s0, shuffles the sample labels to estimate how many false calls to expect, and picks the threshold that keeps the false discovery rate at your chosen level. Idea from Tusher et al. 2001, as used in Perseus (Tyanova et al. 2016). Only proteins enriched in the bait are called.</li>
     <li><strong>Benjamini-Hochberg q value.</strong> Multiple testing correction of the t-test p values (Benjamini and Hochberg 1995), with a q value cutoff you choose.</li>
     <li><strong>Alternative imputation.</strong> MinDet and MinProb replace missing values using a low quantile of each column, following the comparison by Lazar et al. 2016 for values missing because they fell below detection.</li>
   </ul>
   <p>Ideas not built yet: moderated (limma style) t-tests, SAINT or limma result import, contaminant flagging with CRAPome, complex enrichment with CORUM. Pull requests and issues are welcome.</p>
+
+  <h3>Limits to keep in mind</h3>
+  <ul>
+    <li>P values computed with filled-in values are optimistic, because filled-in numbers count as independent replicates. The hollow points, the "Filled in" column and the sensitivity check exist to show you where that matters.</li>
+    <li>msVolcano does not normalise your data. Use the normalised LFQ or abundance columns from your software, and check the loading balance on the Quality checks tab.</li>
+    <li>With two or three replicates per group the statistics are weak whatever the method. The tool says so under the plot.</li>
+    <li>The hyperbolic curve is a tuning device, not a false discovery rate. The permutation FDR and Benjamini-Hochberg options are experimental, and the permutation FDR needs enough replicates to have more than a handful of distinct label shuffles.</li>
+    <li>The sample map (PCA) uses only proteins measured in every sample, so it shows the background more than the specific interactors. The sensitivity check varies the fill-in shift and the random draw, not every analysis choice.</li>
+    <li>Control samples usually have fewer values than bait samples, because the tested proteins are chosen by their bait signal. The coverage check therefore compares each sample with the others of its own group.</li>
+    <li>The DIA-NN, Spectronaut and Proteome Discoverer readers are beta.</li>
+  </ul>
 
   <h3>How to cite</h3>
   <p>If you use msVolcano, please cite the paper:</p>
@@ -73,6 +84,6 @@ export const aboutHtml = `
   <p>Commercial use needs a separate commercial license. Contact the author through the profile below.</p>
 
   <h3>History and author</h3>
-  <p>The original web app ran on a server at BIOTEC, TU Dresden. That server was retired and the link in the paper stopped working. Version 2 is a rewrite, not a copy: the statistics were reimplemented in TypeScript and checked against reference values from SciPy. Behaviour follows the description in the paper.</p>
+  <p>The original web app ran on a server at BIOTEC, TU Dresden. That server was retired and the link in the paper stopped working. Version 2 is a rewrite, not a copy: the statistics were reimplemented in TypeScript, and the t-test and p value arithmetic was checked against reference values from SciPy. Behaviour follows the description in the paper except where listed under "New in version 2".</p>
   <p>Author: Sukhdeep Singh. <a href="https://scholar.google.com/citations?user=y62wfS8AAAAJ&hl=en">Google Scholar profile</a>. Source code and issue tracker: <a href="https://github.com/uksurd88/msvolcano">github.com/uksurd88/msvolcano</a>.</p>
 </article>`;

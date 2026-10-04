@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { detectFormat, explainUnsupported } from "../src/engine/formats";
 import { parseDelimited } from "../src/engine/parse";
 import { computeVolcano } from "../src/engine/volcano";
-import { groupColumns } from "../src/groups";
+import { groupColumns, suggestRole } from "../src/groups";
 
 const tsv = (...lines: string[]) => parseDelimited(lines.join("\n"), "\t");
 
@@ -119,5 +119,32 @@ describe("generic table and decimal commas", () => {
   });
   it("returns null when nothing looks like samples", () => {
     expect(detectFormat(tsv("a\tb", "x\ty"))).toBeNull();
+  });
+});
+
+
+describe("parser anchoring", () => {
+  it("keeps DIA-NN runs whose path contains Sequences or starts with N.", () => {
+    const t = tsv("Protein.Group\tGenes\tD:\\Sequences\\run_1.raw\tD:\\Sequences\\run_2.raw\tN.run3.raw\tN.run4.raw\tN.All.Sequences", ...Array.from({ length: 30 }, (_, i) => `P${i}\tG${i}\t1e6\t1e6\t1e6\t1e6\t12`));
+    const f = detectFormat(t)!;
+    expect(f.sampleColumns).toHaveLength(4);
+    expect(f.sampleColumns).not.toContain("N.All.Sequences");
+  });
+  it("keeps a FragPipe sample whose name starts with Combined or contains Total", () => {
+    const t = tsv("Protein\tProtein ID\tGene\tCombined_1 MaxLFQ Intensity\tCombined_2 MaxLFQ Intensity\tTotal_lysate MaxLFQ Intensity\tbait MaxLFQ Intensity\tCombined Total Peptides", "p\tP1\tG\t1\t2\t3\t4\t5");
+    expect(detectFormat(t)!.sampleColumns).toHaveLength(4);
+  });
+  it("cleans raw Proteome Discoverer abundance names", () => {
+    const t = tsv("Accession\tGene Symbol\tAbundance: F1: Bait 1\tAbundance: F2: Bait 2\tAbundance: F3: Ctrl 1\tAbundance: F4: Ctrl 2", "P1\tG\t1\t2\t3\t4");
+    const f = detectFormat(t)!;
+    expect(f.sampleColumns.map(f.clean)).toEqual(["Bait 1", "Bait 2", "Ctrl 1", "Ctrl 2"]);
+  });
+  it("treats n.d. and N/A as missing when deciding if a column is numeric", () => {
+    const t = tsv("Protein\ta_1\ta_2\tb_1\tb_2", ...Array.from({ length: 25 }, (_, i) => `P${i}\t${i % 5 === 0 ? "n.d." : 10 + i}\t11\t${i % 7 === 0 ? "N/A" : 12}\t13`));
+    expect(detectFormat(t)!.sampleColumns).toHaveLength(4);
+  });
+  it("suggests bait before control when both words appear", () => {
+    expect(suggestRole("GFP_bait")).toBe("bait");
+    expect(suggestRole("GFP_ctrl")).toBe("control");
   });
 });

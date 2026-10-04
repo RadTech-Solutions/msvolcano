@@ -20,7 +20,8 @@ export function observedCorrelation(proteins: Protein[]): number[][] {
       const xs: number[] = [], ys: number[] = [];
       for (const q of proteins) if (!Number.isNaN(q.raw[a]) && !Number.isNaN(q.raw[b])) { xs.push(q.raw[a]); ys.push(q.raw[b]); }
       let r = NaN;
-      if (xs.length > 2) {
+      // Too few shared proteins give an unstable correlation, so leave it blank.
+      if (xs.length >= 20) {
         const mx = mean(xs), my = mean(ys);
         let sxy = 0, sxx = 0, syy = 0;
         for (let i = 0; i < xs.length; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
@@ -37,10 +38,12 @@ export function symmetricEigen(A: number[][]): { values: number[]; vectors: numb
   const n = A.length;
   const a = A.map((r) => [...r]);
   const v: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  let norm = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) norm += A[i][j] ** 2;
   for (let sweep = 0; sweep < 100; sweep++) {
     let off = 0;
     for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += a[i][j] ** 2;
-    if (off < 1e-20) break;
+    if (off <= 1e-22 * Math.max(norm, 1e-300)) break;
     for (let p = 0; p < n - 1; p++) {
       for (let q = p + 1; q < n; q++) {
         if (Math.abs(a[p][q]) < 1e-300) continue;
@@ -103,14 +106,23 @@ export function loadingCheck(proteins: Protein[], nBait: number): Check {
     : { id: "loading", status: "ok", title: "Loading balance", detail: `Bait and control samples have similar overall signal (difference ${d.toFixed(2)} log2).` };
 }
 
-/** Warn when a sample has few quantified proteins compared with its group. */
-export function coverageCheck(coverage: { column: string; observed: number; total: number }[]): Check {
-  if (!coverage.length) return { id: "coverage", status: "info", title: "Quantified proteins per sample", detail: "" };
+/**
+ * Warn when one sample has far fewer quantified proteins than the others of its group.
+ * Control samples are expected to have fewer values overall (the tested proteins were picked by their bait
+ * signal), so a low share alone is not a problem. A sample that lags its own group is.
+ */
+export function coverageCheck(coverage: { column: string; observed: number; total: number; group?: "bait" | "control" }[]): Check {
+  const title = "Quantified proteins per sample";
+  if (!coverage.length) return { id: "coverage", status: "info", title, detail: "" };
   const frac = coverage.map((c) => (c.total ? c.observed / c.total : 0));
-  const worst = Math.min(...frac), i = frac.indexOf(worst);
-  return worst < 0.5
-    ? { id: "coverage", status: "warn", title: "Quantified proteins per sample", detail: `${coverage[i].column} has a value for only ${(worst * 100).toFixed(0)}% of the tested proteins. Heavy missingness makes imputation dominate the result.` }
-    : { id: "coverage", status: "ok", title: "Quantified proteins per sample", detail: `Every sample has values for at least ${(worst * 100).toFixed(0)}% of the tested proteins.` };
+  const groupMedian = (g: string | undefined) => median(frac.filter((_, k) => coverage[k].group === g));
+  let worstGap = 0, wi = -1;
+  frac.forEach((f, k) => { const gap = groupMedian(coverage[k].group) - f; if (gap > worstGap) { worstGap = gap; wi = k; } });
+  const lowest = Math.min(...frac);
+  if (wi >= 0 && worstGap > 0.2 && frac[wi] < 0.7) {
+    return { id: "coverage", status: "warn", title, detail: `${coverage[wi].column} has a value for ${(frac[wi] * 100).toFixed(0)}% of the tested proteins, well below the other ${coverage[wi].group ?? ""} samples (typically ${(groupMedian(coverage[wi].group) * 100).toFixed(0)}%). Heavy missingness makes filled-in values dominate that sample.` };
+  }
+  return { id: "coverage", status: "ok", title, detail: `No sample lags its group. The lowest share of proteins with a value is ${(lowest * 100).toFixed(0)}%.` };
 }
 
 export interface BaitCheck extends Check { found: boolean }

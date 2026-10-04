@@ -63,6 +63,8 @@ export function tTwoSidedP(t: number, df: number): number {
 
 export interface TTestResult {
   diff: number;
+  /** Standard error of the difference. */
+  se: number;
   t: number;
   df: number;
   p: number;
@@ -82,9 +84,10 @@ export function tTest(a: number[], b: number[], welch: boolean): TTestResult | n
     df = na + nb - 2;
     se = Math.sqrt((((na - 1) * va + (nb - 1) * vb) / df) * (1 / na + 1 / nb));
   }
-  if (!(se > 0)) return null;
+  // Zero variance in both groups gives no usable test. Rounding noise must not pass for a real variance.
+  if (!(se > 1e-12 * Math.max(1, Math.abs(ma), Math.abs(mb)))) return null;
   const t = (ma - mb) / se;
-  return { diff: ma - mb, t, df, p: tTwoSidedP(t, df) };
+  return { diff: ma - mb, se, t, df, p: tTwoSidedP(t, df) };
 }
 
 /** Small seeded PRNG (mulberry32) so imputation is reproducible. */

@@ -21,7 +21,8 @@ export function groupColumns(columns: string[], clean: (column: string) => strin
 
 /** Suggest a role from the group name. Only obvious keywords; everything else stays off. */
 export function suggestRole(name: string): Role {
-  if (/(^|[\s_.\-])(ctrl|control|neg|mock|igg|empty|gfp|wt|beads?)([\s_.\-]|$)/i.test(name)) return "control";
+  // An explicit "bait" wins over words like GFP or WT, so "GFP_bait" is a bait.
   if (/(^|[\s_.\-])bait([\s_.\-]|$)/i.test(name)) return "bait";
+  if (/(^|[\s_.\-])(ctrl|control|neg|mock|igg|empty|gfp|wt|beads?)([\s_.\-]|$)/i.test(name)) return "control";
   return "off";
 }

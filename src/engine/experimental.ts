@@ -43,6 +43,8 @@ export interface PermutationResult {
  */
 export function permutationFdr(proteins: Protein[], nBait: number, s0: number, fdr: number, permutations: number, seed: number): PermutationResult | null {
   if (!proteins.length) return null;
+  // The score needs every value. With "do not fill in" there are gaps, so the method cannot run.
+  if (proteins.some((q) => q.values.some((v) => Number.isNaN(v)))) return null;
   const nCols = proteins[0].values.length;
   const d = proteins.map((q) => scores(q.values, nBait, s0));
   const rand = rng(seed);

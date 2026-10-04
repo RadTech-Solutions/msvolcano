@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { parseDelimited } from "../src/engine/parse";
+import { parseNumber, usesDecimalComma } from "../src/engine/numbers";
+import { permutationFdr } from "../src/engine/experimental";
+import { sniffSeparator } from "../src/engine/parse";
 import { baitRecovery, coverageCheck, loadingCheck, observedCorrelation, samplePca, symmetricEigen } from "../src/engine/qc";
 import { tTest } from "../src/engine/stats";
 import { computeVolcano, presenceCsv, shiftSensitivity, type Params, type Protein } from "../src/engine/volcano";
@@ -37,8 +40,14 @@ describe("presence only handling", () => {
     expect(r.presenceOnly[0].nBait).toBe(4);
     expect(r.dropped.presenceOnly).toBe(1);
   });
-  it("keeps a protein seen once in bait in the test rather than calling it present only", () => {
+  it("leaves out a protein measured only once in total, which would be tested on filled-in values alone", () => {
     const r = computeVolcano(table, { ...params, presence: "separate" });
+    expect(r.proteins.find((p) => p.gene === "SPARSE")).toBeUndefined();
+    expect(r.presenceOnly.find((p) => p.gene === "SPARSE")).toBeUndefined();
+    expect(r.dropped.tooFewValues).toBe(1);
+  });
+  it("as published, the same protein is still tested", () => {
+    const r = computeVolcano(table, { ...params, presence: "include" });
     expect(r.proteins.find((p) => p.gene === "SPARSE")).toBeDefined();
   });
   it("still tests a protein with some control values", () => {
@@ -116,9 +125,18 @@ describe("quality checks", () => {
     expect(loadingCheck(shifted, 4).status).toBe("warn");
     expect(loadingCheck(r.proteins, 4).status).toBe("ok");
   });
-  it("warns when a sample has few values", () => {
-    expect(coverageCheck([{ column: "s1", observed: 10, total: 100 }]).status).toBe("warn");
-    expect(coverageCheck([{ column: "s1", observed: 90, total: 100 }]).status).toBe("ok");
+  it("warns when one sample lags the others of its group, not when a whole group is lower", () => {
+    const lag = [
+      { column: "b1", observed: 90, total: 100, group: "bait" as const }, { column: "b2", observed: 92, total: 100, group: "bait" as const }, { column: "b3", observed: 20, total: 100, group: "bait" as const },
+      { column: "c1", observed: 90, total: 100, group: "control" as const },
+    ];
+    expect(coverageCheck(lag).status).toBe("warn");
+    expect(coverageCheck(lag).detail).toContain("b3");
+    const controlsLower = [
+      { column: "b1", observed: 95, total: 100, group: "bait" as const }, { column: "b2", observed: 96, total: 100, group: "bait" as const },
+      { column: "c1", observed: 45, total: 100, group: "control" as const }, { column: "c2", observed: 47, total: 100, group: "control" as const },
+    ];
+    expect(coverageCheck(controlsLower).status).toBe("ok");
   });
 });
 
@@ -140,5 +158,76 @@ describe("pca", () => {
   it("returns null with too few complete proteins", () => {
     const r = computeVolcano(table, { ...params, presence: "separate" });
     expect(samplePca(r.proteins.slice(0, 3))).toBeNull();
+  });
+});
+
+
+describe("audit fixes", () => {
+  it("refuses a selected column with no values instead of mis-detecting the scale", () => {
+    const t = parseDelimited([HEAD, row("A", "GA", [1e7, 1e7, 1e7, 0], [1e7, 1e7, 1e7, 1e7]), row("B", "GB", [2e7, 2e7, 2e7, 0], [1e7, 1e7, 1e7, 1e7])].join("\n"), "\t");
+    expect(() => computeVolcano(t, { ...params })).toThrow(/has no values/);
+  });
+  it("detects the scale from the typical value and honours the user's choice", () => {
+    expect(computeVolcano(table, { ...params }).scale.mode).toBe("raw");
+    const logged = parseDelimited([HEAD, ...Array.from({ length: 30 }, (_, i) => row(`L${i}`, `L${i}`, [25 + i / 10, 25.2, 24.9, 25.1], [24, 24.1, 23.9, 24.2]))].join("\n"), "\t");
+    const auto = computeVolcano(logged, { ...params, bait, control });
+    expect(auto.scale.mode).toBe("log2");
+    expect(auto.logTransformed).toBe(false);
+    expect(computeVolcano(logged, { ...params, bait, control, logMode: "raw" }).scale.mode).toBe("raw");
+  });
+  it("warns when log2 is forced on raw looking values", () => {
+    expect(computeVolcano(table, { ...params, logMode: "log2" }).scale.warning).toContain("raw intensities");
+  });
+  it("warns when values look like log10 or natural log", () => {
+    const small = parseDelimited([HEAD, ...Array.from({ length: 30 }, (_, i) => row(`L${i}`, `L${i}`, [6 + i / 100, 6.1, 5.9, 6.05], [5, 5.1, 4.9, 5.2]))].join("\n"), "\t");
+    expect(computeVolcano(small, { ...params, bait, control }).scale.warning).toContain("log10");
+  });
+  it("gives every filled-in cell its own draw, so changing the presence setting does not reshuffle other proteins", () => {
+    const a = computeVolcano(table, { ...params, presence: "include" }).proteins.find((p) => p.gene === "MIXED")!;
+    const b = computeVolcano(table, { ...params, presence: "separate" }).proteins.find((p) => p.gene === "MIXED")!;
+    expect(a.values).toEqual(b.values);
+    expect(a.x).toBe(b.x);
+  });
+  it("is reproducible for the same seed and differs for another", () => {
+    const f = (seed: number) => computeVolcano(table, { ...params, seed }).proteins.find((p) => p.gene === "MIXED")!.values;
+    expect(f(1)).toEqual(f(1));
+    expect(f(1)).not.toEqual(f(2));
+  });
+  it("returns no test when the variance is only rounding noise", () => {
+    expect(tTest([0.1, 0.1, 0.1], [0.3, 0.3, 0.3], false)).toBeNull();
+    const t = tTest([1, 2, 3], [2, 3, 5], false)!;
+    expect(t.se).toBeCloseTo(t.diff / t.t, 12);
+  });
+  it("cannot run permutation FDR when values are missing", () => {
+    const r = computeVolcano(table, { ...params, imputation: "none", presence: "include" });
+    expect(permutationFdr(r.proteins, 4, 0.1, 0.05, 20, 1)).toBeNull();
+  });
+  it("needs 20 shared proteins before reporting a correlation", () => {
+    const few = computeVolcano(table, { ...params }).proteins.slice(0, 10);
+    expect(Number.isNaN(observedCorrelation(few)[0][1])).toBe(true);
+  });
+});
+
+describe("numbers and separators", () => {
+  it("reads thousands separators and decimal commas correctly", () => {
+    expect(parseNumber("1,234.5")).toBe(1234.5);
+    expect(parseNumber("1.234,5", true)).toBe(1234.5);
+    expect(parseNumber("12,5", true)).toBe(12.5);
+    expect(parseNumber("1,234,567")).toBe(1234567);
+    expect(parseNumber("n.d.")).toBeNaN();
+    expect(parseNumber("N/A")).toBeNaN();
+    expect(parseNumber("abc")).toBeNaN();
+  });
+  it("decides the style from the values", () => {
+    expect(usesDecimalComma(["1,5", "2,25", "3"])).toBe(true);
+    expect(usesDecimalComma(["1.5", "2,25"])).toBe(false);
+    expect(usesDecimalComma(["1,234", "2,345,678"])).toBe(false);
+    expect(usesDecimalComma(["24,512", "30,118", ""])).toBe(true);
+    expect(usesDecimalComma(["1,234.5", "2,345.6"])).toBe(false);
+  });
+  it("sniffs tab, semicolon and comma", () => {
+    expect(sniffSeparator("a\tb\tc\n1\t2\t3")).toBe("\t");
+    expect(sniffSeparator("a;b;c\n1,5;2,5;3,5")).toBe(";");
+    expect(sniffSeparator("a,b,c\n1,2,3")).toBe(",");
   });
 });

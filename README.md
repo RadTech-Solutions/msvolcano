@@ -27,6 +27,8 @@ Clearly marked in the app and on the About page: s0 score with permutation FDR (
 
 Not ported: loading files from an ftp URL. Ideas: limma style moderated t-test, SAINT or limma result import, CRAPome contaminant flags, CORUM complex enrichment.
 
+The unmodified first version (before stoichiometry, the About page, the redesign and the quality checks) is kept at `/first-version/` on the live site, built from the git tag `first-version`.
+
 ## Run locally
 
 ```

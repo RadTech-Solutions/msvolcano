@@ -2,7 +2,12 @@
 
 Volcano plots for label free interactomics data from MaxQuant. Load a `proteinGroups.txt`, pick bait and control LFQ columns, tune the hyperbolic cutoff, and export the plot and the list of interactors. Everything runs in your browser, so your data stays on your machine.
 
-This is version 2, a rewrite of the Shiny app described in the original paper. The old server at TU Dresden BIOTEC is gone.
+A browser rewrite of the Shiny app described in the original paper. The old server at TU Dresden BIOTEC is gone.
+
+The site has two versions, chosen with the switch at the top of the page:
+
+* **Version 1** (`?v=1`): the method published in Proteomics 2016. MaxQuant LFQ input, Student or Welch t-test, shifted normal fill-in, hyperbolic cutoff, stoichiometry. Settings are locked to the published behaviour.
+* **Version 2** (`?v=2`): experimental, not validated. Everything below that is marked as new.
 
 ## What it does
 
@@ -26,8 +31,6 @@ This is version 2, a rewrite of the Shiny app described in the original paper. T
 Clearly marked in the app and on the About page: s0 score with permutation FDR (Perseus style), Benjamini-Hochberg q values, and MinDet and MinProb imputation. They are not peer reviewed or benchmarked. Tests cover the arithmetic and a pure noise calibration, not their scientific validity.
 
 Not ported: loading files from an ftp URL. Ideas: limma style moderated t-test, SAINT or limma result import, CRAPome contaminant flags, CORUM complex enrichment.
-
-The unmodified first version (before stoichiometry, the About page, the redesign and the quality checks) is kept at `/first-version/` on the live site, built from the git tag `first-version`.
 
 ## Run locally
 

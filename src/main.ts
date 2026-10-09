@@ -73,7 +73,7 @@ const sliderGroups: Record<string, Slider[]> = {
 };
 
 const step = (id: string, n: string, title: string, hint: string, body: string, opts: { open?: boolean; exp?: boolean; optional?: boolean } = {}) => `
-<details class="step${opts.exp ? " exp" : ""}" id="${id}"${opts.open ? " open" : ""}>
+<details class="step${opts.exp ? " exp v2only" : ""}" id="${id}"${opts.open ? " open" : ""}>
   <summary><span class="badge-n">${n}</span><span class="step-title">${title}</span>${opts.exp ? '<span class="pill exp">Experimental</span>' : opts.optional ? '<span class="pill">Optional</span>' : ""}<span class="hint" id="${id}-hint">${hint}</span>${ICON.chev}</summary>
   <div class="body">${body}</div>
 </details>`;
@@ -81,7 +81,7 @@ const step = (id: string, n: string, title: string, hint: string, body: string, 
 document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 <header class="topbar">
   <h1 class="sr">msVolcano, volcano plots for interactomics</h1>
-  <a class="brand" href="#tool">${logo}<span>msVolcano</span><small>v2</small></a>
+  <a class="brand" href="#tool">${logo}<span>msVolcano</span><small id="brand-ver">V1</small></a>
   <nav class="tabs" aria-label="Main"><a href="#tool" id="nav-tool">Analyze</a><a href="#about" id="nav-about">About and citation</a></nav>
   <span class="spacer"></span>
   <div class="seg" role="group" aria-label="Color theme" id="themeSeg">
@@ -92,16 +92,25 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
   <a class="icon-link" href="https://github.com/uksurd88/msvolcano" aria-label="Source code on GitHub" title="Source code on GitHub">${ICON.github}</a>
 </header>
 
+<section class="verbar" id="verbar" aria-label="Choose the version">
+  <div class="ver-switch" role="group" aria-label="Version">
+    <button type="button" data-ver="1" aria-pressed="true"><b>Version 1</b><span>As published, Proteomics 2016</span></button>
+    <button type="button" data-ver="2" aria-pressed="false"><b>Version 2 <span class="pill exp">Experimental</span></b><span>New methods, not validated</span></button>
+  </div>
+  <p class="ver-note v1only">The method of the 2016 paper: MaxQuant LFQ input, Student or Welch t-test, shifted normal fill-in, hyperbolic cutoff, stoichiometry. Use this version to reproduce or cite published results.</p>
+  <p class="ver-note v2only">${ICON.alert}<span>Version 2 adds methods that are <b>not peer reviewed or validated</b>: more input formats, separate handling of bait-only proteins, other fill-in methods, FDR cutoffs and quality checks. Results can differ from version 1. Check them against version 1 or an established tool before you rely on them.</span></p>
+</section>
+
 <div class="workspace" id="tool-view">
   <aside class="sidebar" aria-label="Analysis settings">
     ${step("s1", "1", "Add your data", "MaxQuant file", `
-      <label class="drop" id="drop" for="file">${ICON.upload}<strong>Drop your protein table here</strong><span>MaxQuant, FragPipe, DIA-NN and more. Click to browse.</span></label>
+      <label class="drop" id="drop" for="file">${ICON.upload}<strong>Drop your protein table here</strong><span class="v1only">MaxQuant proteinGroups.txt with LFQ. Click to browse.</span><span class="v2only">MaxQuant, FragPipe, DIA-NN and more. Click to browse.</span></label>
       <input id="file" class="sr" type="file" accept=".txt,.tsv,.csv" />
       <div class="filechip" id="filechip" hidden></div>
       <p class="help" id="fmt-note" style="font-size:.78rem;color:var(--color-ink-3)" hidden></p>
-      <div class="field" id="fmt-force-wrap" hidden><label for="fmt-force">Not read correctly?</label><select id="fmt-force"><option value="auto">Detect the format automatically</option><option value="generic">Treat as a plain table (numeric columns are samples)</option></select></div>
+      <div class="field v2only" id="fmt-force-wrap" hidden><label for="fmt-force">Not read correctly?</label><select id="fmt-force"><option value="auto">Detect the format automatically</option><option value="generic">Treat as a plain table (numeric columns are samples)</option></select></div>
       <div class="row-actions"><button class="btn small" id="example" type="button">${ICON.flask}Try an example dataset (simulated)</button><button class="btn small" id="replace" type="button" hidden>Replace file</button></div>
-      <details style="font-size:.82rem;color:var(--color-ink-2)"><summary style="cursor:pointer;font-weight:600">What file do I need?</summary><p style="margin-top:6px">A protein table with one intensity column per sample. Supported: MaxQuant <code>proteinGroups.txt</code> (with <b>LFQ</b> switched on), FragPipe <code>combined_protein.tsv</code>, DIA-NN <code>report.pg_matrix.tsv</code>, Spectronaut protein group pivot, Proteome Discoverer protein export, Perseus matrices, or any table of numbers. DIA-NN, Spectronaut and Proteome Discoverer readers are beta.</p></details>
+      <details style="font-size:.82rem;color:var(--color-ink-2)"><summary style="cursor:pointer;font-weight:600">What file do I need?</summary><p class="v1only" style="margin-top:6px">MaxQuant <code>proteinGroups.txt</code> with <b>LFQ</b> switched on, as in the 2016 tool. Other formats are read by version 2.</p><p class="v2only" style="margin-top:6px">A protein table with one intensity column per sample. Supported: MaxQuant <code>proteinGroups.txt</code> (with <b>LFQ</b> switched on), FragPipe <code>combined_protein.tsv</code>, DIA-NN <code>report.pg_matrix.tsv</code>, Spectronaut protein group pivot, Proteome Discoverer protein export, Perseus matrices, or any table of numbers. DIA-NN, Spectronaut and Proteome Discoverer readers are beta.</p></details>
       <p class="help" style="font-size:.78rem;color:var(--color-ink-3);display:flex;gap:6px;align-items:center"><span style="width:14px;height:14px;display:inline-flex">${ICON.lock}</span>Stays on this computer. Works offline once loaded.</p>`, { open: true })}
     ${step("s2", "2", "Choose bait and control", "Pick two groups", `
       <p class="help" style="font-size:.8rem;color:var(--color-ink-3)">Replicates are grouped by name. Mark one group as bait and one as control. Untick a replicate to leave it out. Several bait groups are pooled into one.</p>
@@ -109,13 +118,15 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     ${step("s3", "3", "Set the cutoff", "Hyperbolic curve", `
       <div class="field"><label for="test">Statistical test</label><select id="test"><option value="student">Student t-test (equal variance)</option><option value="welch">Welch t-test (unequal variance)</option></select></div>
       <div id="sl-cutoff"></div>
-      <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600;font-size:.85rem">Missing values and bait-only proteins <span class="pill new">New in v2</span></summary>
+      <details class="v2only" style="margin-top:4px"><summary style="cursor:pointer;font-weight:600;font-size:.85rem">Missing values and bait-only proteins <span class="pill new">New in v2</span></summary>
         <div style="display:grid;gap:var(--space-3);margin-top:var(--space-3)">
           <div class="field"><label for="presence">Seen in bait, never in a control</label><select id="presence"><option value="separate">List separately (recommended)</option><option value="include">Fill in and test (as published)</option></select><span class="help">A protein found in at least 2 bait replicates and not detected in any control cannot be ranked fairly by a t-test, which would use filled-in control values. It gets its own list with replicate counts. Proteins measured once in total are left out. Pick "Fill in and test" to match the 2016 tool.</span></div>
           <div class="field"><label for="imputation">Filling in other missing values</label><select id="imputation"><option value="normal">Shifted normal (as published)</option><option value="mindet">MinDet: low quantile of each column (experimental)</option><option value="minprob">MinProb: random draw around low quantile (experimental)</option><option value="none">Do not fill in: test the measured values only</option></select><span class="help">Points that include a filled-in value are hollow. "Do not fill in" needs two measured values per group, so proteins with fewer drop out of the volcano.</span></div>
           <div class="field"><label for="logmode">Intensity scale</label><select id="logmode"><option value="auto">Detect automatically</option><option value="raw">Raw intensities (not logged)</option><option value="log2">Already log2</option></select><span class="help">msVolcano works in log2. It reads the note under the plot to tell you what it decided. Set this if the guess is wrong, for example for log10 data or spectral counts.</span></div>
-          <div id="sl-impute" style="display:grid;gap:var(--space-3)"></div>
-        </div></details>`)}
+        </div></details>
+      <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600;font-size:.85rem">Fill-in of missing values</summary>
+        <div id="sl-impute" style="display:grid;gap:var(--space-3);margin-top:var(--space-3)"></div>
+      </details>`)}
     ${step("s4", "4", "Plot and labels", "Axes, names, titles", `
       <div id="sl-plot"></div>
       <div class="field"><label for="manual">Highlight proteins</label><input id="manual" type="text" placeholder="Wdr5;Mll2" autocomplete="off" /><span class="help">Gene names separated by semicolons. Matches names that start with your text.</span></div>
@@ -140,7 +151,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <section class="hero" id="hero">
       <div style="display:grid;gap:var(--space-4)">
         <h2>See what binds your bait</h2>
-        <p class="lede">Turn a label free interactomics run (MaxQuant, FragPipe, DIA-NN and more) into a volcano plot and a ranked list of interactors. Choose bait and control, tune the cutoff, check quality, export the figure.</p>
+        <p class="lede"><span class="v1only">Turn a MaxQuant label free interactomics run into</span><span class="v2only">Turn a label free interactomics run (MaxQuant, FragPipe, DIA-NN and more) into</span> a volcano plot and a ranked list of interactors. Choose bait and control, tune the cutoff, export the figure.</p>
         <div class="cta">
           <button class="btn primary" id="hero-browse" type="button">${ICON.upload}Choose a file</button>
           <button class="btn" id="hero-example" type="button">${ICON.flask}Try an example dataset</button>
@@ -167,9 +178,9 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
               <button id="png" type="button">${ICON.download}Figure as PNG</button>
               <button id="svg" type="button">${ICON.download}Figure as SVG</button>
               <button id="csv" type="button">${ICON.download}Interactors as CSV</button>
-              <button id="csvp" type="button">${ICON.download}Present-only list as CSV</button>
+              <button id="csvp" class="v2only" type="button">${ICON.download}Present-only list as CSV</button>
               <button id="copy" type="button">${ICON.copy}Copy interactor genes</button>
-              <button id="copyall" type="button">${ICON.copy}Copy interactors and present-only genes</button>
+              <button id="copyall" class="v2only" type="button">${ICON.copy}Copy interactors and present-only genes</button>
             </div>
           </details>
         </header>
@@ -180,8 +191,8 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <div class="card" style="margin-top:var(--space-4)">
         <div class="subtabs" role="tablist" aria-label="Results views">
           <button role="tab" id="tab-hits" aria-selected="true" aria-controls="panel-hits" tabindex="0" type="button">Interactors <span id="hit-count" class="num"></span></button>
-          <button role="tab" id="tab-presence" aria-selected="false" aria-controls="panel-presence" tabindex="-1" type="button">Present only in bait <span id="presence-count" class="num"></span></button>
-          <button role="tab" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Quality checks <span id="qc-dot"></span></button>
+          <button role="tab" class="v2only" id="tab-presence" aria-selected="false" aria-controls="panel-presence" tabindex="-1" type="button">Present only in bait <span id="presence-count" class="num"></span></button>
+          <button role="tab" class="v2only" id="tab-qc" aria-selected="false" aria-controls="panel-qc" tabindex="-1" type="button">Quality checks <span id="qc-dot"></span></button>
         </div>
         <div id="panel-hits" role="tabpanel" aria-labelledby="tab-hits">
           <div class="toolbar">
@@ -217,7 +228,7 @@ const DEFAULT_NUM = { minFoldChange: defaultParams.minFoldChange, curvature: def
 // Exports always use this palette so a figure saved in dark mode is still print ready.
 const LIGHT_PLOT = { ink: "#1f2430", grid: "#e9ecf1", axis: "#5b6577", bg: "#ffffff", point: "#7b879c", hit: "#d94a2b", pick: "#0e8a86", curve: "#5b6577" };
 
-interface Saved { pr?: string; lm?: string; n?: Record<string, number>; r?: Record<string, Role>; x?: string[]; m?: string; t?: string; i?: string; man?: string; ti?: string; b?: string; so?: boolean; sg?: string; sb?: string }
+interface Saved { v?: Version; pr?: string; lm?: string; n?: Record<string, number>; r?: Record<string, Role>; x?: string[]; m?: string; t?: string; i?: string; man?: string; ti?: string; b?: string; so?: boolean; sg?: string; sb?: string }
 
 const state = {
   table: null as Table | null,
@@ -237,7 +248,7 @@ const state = {
   sort: { key: "x", dir: -1 as 1 | -1 },
   filter: "",
   pending: null as Saved | null,
-  fmt: null as { label: string; note?: string } | null,
+  fmt: null as { id: string; label: string; note?: string } | null,
   clean: ((c: string) => c) as (c: string) => string,
   rowsShown: 25,
   pca: null as PcaResult | null,
@@ -277,6 +288,37 @@ function route() {
 }
 window.addEventListener("hashchange", route);
 route();
+
+/* ---------- Version ---------- */
+
+// Version 1 is the method of the 2016 paper. Version 2 adds methods that are not validated.
+type Version = 1 | 2;
+let version: Version = 1;
+const sel = (id: string) => $(id) as HTMLSelectElement;
+function readVersion(): Version {
+  const q = new URLSearchParams(location.search).get("v");
+  if (q === "1" || q === "2") return Number(q) as Version;
+  try { if (localStorage.getItem("msv-version") === "2") return 2; } catch { /* storage may be blocked */ }
+  return 1;
+}
+/** Version 1 always runs with the published settings. Version 2 starts from its own defaults. */
+function lockMethods() {
+  if (version === 1) { sel("presence").value = "include"; sel("imputation").value = "normal"; sel("logmode").value = "auto"; sel("mode").value = "hyperbola"; }
+}
+function setVersion(v: Version, opts: { persist?: boolean; recompute?: boolean } = {}) {
+  const changed = v !== version;
+  version = v;
+  document.body.classList.toggle("ver1", v === 1);
+  document.body.classList.toggle("ver2", v === 2);
+  document.querySelectorAll<HTMLButtonElement>("[data-ver]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.ver === String(v))));
+  $("brand-ver").textContent = `V${v}`;
+  if (v === 1) lockMethods(); else if (changed) sel("presence").value = "separate";
+  if (v === 1 && state.table?.forceFormat) { state.table.forceFormat = undefined; sel("fmt-force").value = "auto"; }
+  const url = new URL(location.href); url.searchParams.set("v", String(v)); history.replaceState(null, "", url);
+  if (opts.persist) { try { localStorage.setItem("msv-version", String(v)); } catch { /* ignore */ } }
+  if (v === 1 && !$("results").hidden) selectTab("hits");
+  if (opts.recompute && state.table) { if (v === 1 || changed) state.fitAxes = true; compute(); }
+}
 
 /* ---------- Helpers ---------- */
 
@@ -397,7 +439,7 @@ function loadText(text: string, name: string, preset?: { baitName: string }) {
     fail(`Only one group of LFQ columns was found (${groups[0].name}). You need at least two: one bait and one control.`);
     return;
   }
-  state.table = table; state.fileName = name; state.clean = detected.clean; state.fmt = { label: detected.label, note: detected.note }; state.fitAxes = true; state.result = null;
+  state.table = table; state.fileName = name; state.clean = detected.clean; state.fmt = { id: detected.id, label: detected.label, note: detected.note }; state.fitAxes = true; state.result = null;
   state.groups = groups;
   // Only the first obvious bait and the first obvious control are pre-selected, so unrelated groups are never pooled silently.
   const seen = { bait: false, control: false };
@@ -440,7 +482,7 @@ $("fmt-force").addEventListener("change", () => {
   const detected = detectFormat(text);
   if (!detected || detected.sampleColumns.length < 4) { toast("That reading did not find four sample columns."); state.table.forceFormat = undefined; ($("fmt-force") as HTMLSelectElement).value = "auto"; return; }
   const groups = groupColumns(detected.sampleColumns, detected.clean);
-  state.groups = groups; state.clean = detected.clean; state.fmt = { label: detected.label, note: detected.note };
+  state.groups = groups; state.clean = detected.clean; state.fmt = { id: detected.id, label: detected.label, note: detected.note };
   const seen = { bait: false, control: false };
   state.roles = new Map(groups.map((g) => { let r = suggestRole(g.name); if (r !== "off") { if (seen[r]) r = "off"; else seen[r] = true; } return [g.name, r]; }));
   state.excluded = new Set(); state.suggested = new Set(groups.filter((g) => state.roles.get(g.name) !== "off").map((g) => g.name));
@@ -559,8 +601,14 @@ function showPrompt(title: string, text: string, items: [string, boolean][]) {
 
 function compute() {
   if (!state.table) { showState("hero"); return; }
+  lockMethods();
   const p = currentParams();
   setError("");
+  if (version === 1 && state.fmt && state.fmt.id !== "maxquant") {
+    state.result = null;
+    showPrompt("Version 1 reads MaxQuant files only", `This file was read as ${state.fmt.label}. The 2016 method takes a MaxQuant proteinGroups.txt with LFQ intensities. Switch to version 2 (experimental) to analyse this file.`, [["MaxQuant proteinGroups.txt with LFQ", false]]);
+    return;
+  }
   const baitGroups = state.groups.filter((g) => state.roles.get(g.name) === "bait");
   const ctrlGroups = state.groups.filter((g) => state.roles.get(g.name) === "control");
   const nb = baitGroups.length, nc = ctrlGroups.length;
@@ -629,7 +677,7 @@ function modeSummary(mode: string): string {
   const base = mode === "perm" ? `s0 ${state.num.s0}, FDR ${state.num.fdr} (experimental)` : mode === "bh" ? `BH q < ${state.num.qcut} (experimental)` : `min enrichment ${state.num.minFoldChange}, curvature ${state.num.curvature}`;
   const impText = imp === "normal" ? `fill-in shift ${state.num.shift}, spread ${state.num.shrink}` : imp === "none" ? "no fill-in" : `${imp} imputation (experimental)`;
   const pres = ($("presence") as HTMLSelectElement).value === "separate" ? "bait-only proteins listed separately" : "bait-only proteins filled in";
-  return `msVolcano ${__APP_VERSION__} | ${($("test") as HTMLSelectElement).value === "welch" ? "Welch" : "Student"} t-test | ${base} | ${impText} | ${pres}`;
+  return `msVolcano ${__APP_VERSION__}, version ${version}${version === 2 ? " (experimental)" : " (as published)"} | ${($("test") as HTMLSelectElement).value === "welch" ? "Welch" : "Student"} t-test | ${base} | ${impText} | ${pres}`;
 }
 
 async function draw(forceLight = false) {
@@ -736,6 +784,7 @@ async function draw(forceLight = false) {
   $("mbar-count").textContent = `${hits.length} interactors${nPresence ? ` + ${nPresence} present only` : ""}`;
   $("mbar").hidden = false;
   const notes: string[] = [];
+  notes.push(version === 1 ? "Version 1: the method published in Proteomics 2016." : "Version 2: experimental, not validated. Compare with version 1 before relying on these results.");
   if (nPresence) notes.push(`${nPresence} protein${nPresence > 1 ? "s were" : " was"} seen in bait but in no control, so ${nPresence > 1 ? "they are" : "it is"} not on the volcano. See "Present only in bait". They are not counted in the ${hits.length} interactors.`);
   if (state.fmt) notes.push(`Input: ${state.fmt.label}.${state.fmt.note ? " " + state.fmt.note : ""}`);
   notes.push(r.scale.mode === "raw" ? `Intensities were read as raw values (median ${r.scale.median.toExponential(1)}) and log2 transformed${r.scale.decided === "auto" ? " (decided automatically)" : ""}.` : `Intensities were read as already log2 (median ${r.scale.median.toFixed(1)})${r.scale.decided === "auto" ? " (decided automatically)" : ""}.`);
@@ -975,7 +1024,7 @@ const selVal = (id: string) => ($(id) as HTMLSelectElement | HTMLInputElement).v
 
 function encodeSettings(): string {
   const saved: Saved = {
-    n: { ...state.num }, r: Object.fromEntries([...state.roles].filter(([, v]) => v !== "off")), x: [...state.excluded],
+    v: version, n: { ...state.num }, r: Object.fromEntries([...state.roles].filter(([, v]) => v !== "off")), x: [...state.excluded],
     m: selVal("mode"), t: selVal("test"), i: selVal("imputation"), man: selVal("manual"), ti: selVal("title"), b: selVal("bait-name"),
     so: ($("stoich") as HTMLInputElement).checked, sg: selVal("organism"), sb: selVal("stoichBait"), pr: selVal("presence"), lm: selVal("logmode"),
   };
@@ -986,6 +1035,7 @@ function decodeSettings(raw: string): Saved | null {
 }
 function applySavedControls(s: Saved) {
   for (const [k, v] of Object.entries(s.n ?? {})) if (k in state.num && Number.isFinite(v)) setters[k as keyof typeof state.num]?.(v);
+  if (s.v === 1 || s.v === 2) setVersion(s.v);
   const set = (id: string, v: string | undefined) => { if (v !== undefined) ($(id) as HTMLSelectElement | HTMLInputElement).value = v; };
   set("mode", s.m); set("test", s.t); set("imputation", s.i); set("presence", s.pr); set("logmode", s.lm); set("manual", s.man); set("title", s.ti); set("bait-name", s.b); set("stoichBait", s.sb);
   if (s.so) { ($("stoich") as HTMLInputElement).checked = true; $("stoichOpts").hidden = false; }
@@ -1001,7 +1051,7 @@ function applyPendingRoles() {
   state.pending = null;
 }
 $("share").addEventListener("click", async () => {
-  const url = `${location.origin}${location.pathname}#s=${encodeSettings()}`;
+  const url = `${location.origin}${location.pathname}?v=${version}#s=${encodeSettings()}`;
   try { await navigator.clipboard.writeText(url); toast("Settings link copied. Open it and add the same file to restore this view."); } catch { toast("Copy is blocked by the browser"); }
 });
 $("reset").addEventListener("click", () => {
@@ -1009,10 +1059,18 @@ $("reset").addEventListener("click", () => {
   for (const id of ["manual", "title", "stoichBait"]) ($(id) as HTMLInputElement).value = "";
   ($("mode") as HTMLSelectElement).value = "hyperbola"; ($("test") as HTMLSelectElement).value = "student"; ($("imputation") as HTMLSelectElement).value = "normal"; ($("presence") as HTMLSelectElement).value = "separate"; ($("logmode") as HTMLSelectElement).value = "auto";
   ($("stoich") as HTMLInputElement).checked = false; $("stoichOpts").hidden = true;
+  lockMethods();
   state.fitAxes = true;
   compute();
   toast("Cutoff, plot and method settings reset. Your bait and control choices were kept.");
 });
+setVersion(readVersion());
+document.querySelectorAll<HTMLButtonElement>("[data-ver]").forEach((b) => b.addEventListener("click", () => {
+  const v = Number(b.dataset.ver) as Version;
+  if (v === version) return;
+  setVersion(v, { persist: true, recompute: true });
+  toast(v === 1 ? "Version 1: the published method." : "Version 2: experimental methods, not validated.");
+}));
 {
   const m = /^#s=(.+)$/.exec(location.hash);
   const saved = m ? decodeSettings(m[1]) : null;

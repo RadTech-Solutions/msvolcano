@@ -3,6 +3,11 @@ export const aboutHtml = `
 <article class="about">
   <h2>About msVolcano</h2>
 
+  <h3>Two versions</h3>
+  <p><strong>Version 1</strong> is the method published in <em>Proteomics</em> in 2016, reimplemented to run in the browser: MaxQuant <code>proteinGroups.txt</code> with LFQ intensities, a Student or Welch t-test, missing values filled in from a shifted normal distribution (bait-only proteins included), the hyperbolic cutoff, and stoichiometry. Its settings are locked to the published behaviour. Use it to reproduce or cite published results. Open it directly with <a href="?v=1#tool">?v=1</a>.</p>
+  <p><strong>Version 2</strong> is <strong>experimental and not validated</strong>. It adds more input formats, lists bait-only proteins separately, offers other fill-in methods and FDR based cutoffs, and adds quality checks. None of this was peer reviewed. Results can differ from version 1, so compare before relying on them. Open it with <a href="?v=2#tool">?v=2</a>.</p>
+  <p>Both are the same code base. The steps below describe version 2. Where version 1 differs, it does what the 2016 tool did.</p>
+
   <h3>What it does</h3>
   <p>msVolcano turns the output of a label free affinity purification or affinity enrichment mass spectrometry experiment (AP/MS, AE/MS) into a volcano plot and a list of candidate interactors. You give it a protein table (MaxQuant with LFQ, FragPipe, DIA-NN and others), choose which sample columns are the bait replicates and which are the controls, and adjust a hyperbolic cutoff until the true interactors separate from the background binders.</p>
 
@@ -22,7 +27,7 @@ export const aboutHtml = `
   <p>Your file is read by your browser and processed on your computer. Nothing is uploaded to any server.</p>
 
   <h3>Stoichiometry</h3>
-  <p>Optionally, msVolcano estimates how abundant each enriched protein is relative to the bait, as described in the 2016 paper. The intensity above the control is divided by the number of theoretical tryptic peptides (7 to 30 amino acids) of the protein, then divided by the same quantity for the bait. The peptide tables for nine organisms were rebuilt from UniProt Swiss-Prot for version 2. They count tryptic peptides with the standard rule that trypsin does not cleave before proline, whereas the original tool cleaved there too, so absolute values can differ from the original. Compare numbers only within one analysis.</p>
+  <p>Optionally, msVolcano estimates how abundant each enriched protein is relative to the bait, as described in the 2016 paper. The intensity above the control is divided by the number of theoretical tryptic peptides (7 to 30 amino acids) of the protein, then divided by the same quantity for the bait. The peptide tables for nine organisms were rebuilt from UniProt Swiss-Prot for this rewrite and are used by both versions. They count tryptic peptides with the standard rule that trypsin does not cleave before proline, whereas the original tool cleaved there too, so absolute values can differ from the original. Compare numbers only within one analysis.</p>
 
   <h3>Input</h3>
   <p>A protein table with one intensity column per sample, tab or comma separated. Detected automatically:</p>
@@ -84,6 +89,6 @@ export const aboutHtml = `
   <p>Commercial use needs a separate commercial license. Contact the author through the profile below.</p>
 
   <h3>History and author</h3>
-  <p>The original web app ran on a server at BIOTEC, TU Dresden. That server was retired and the link in the paper stopped working. Version 2 is a rewrite, not a copy: the statistics were reimplemented in TypeScript, and the t-test and p value arithmetic was checked against reference values from SciPy. Behaviour follows the description in the paper except where listed under "New in version 2".</p>
+  <p>The original web app ran on a server at BIOTEC, TU Dresden. That server was retired and the link in the paper stopped working. This site is a rewrite, not a copy: the statistics were reimplemented in TypeScript, and the t-test and p value arithmetic was checked against reference values from SciPy. Behaviour follows the description in the paper except where listed under "New in version 2".</p>
   <p>Author: Sukhdeep Singh. <a href="https://scholar.google.com/citations?user=y62wfS8AAAAJ&hl=en">Google Scholar profile</a>. Source code and issue tracker: <a href="https://github.com/uksurd88/msvolcano">github.com/uksurd88/msvolcano</a>.</p>
 </article>`;

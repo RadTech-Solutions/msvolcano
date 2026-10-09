@@ -5,6 +5,7 @@ type: software
 authors:
   - family-names: Singh
     given-names: Sukhdeep
+    affiliation: RadTech
 repository-code: "https://github.com/RadTech-Solutions/msvolcano"
 url: "https://radtech-solutions.github.io/msvolcano/"
 doi: "10.5281/zenodo.23262108"

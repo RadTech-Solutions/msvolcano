@@ -9,7 +9,7 @@ authors:
 repository-code: "https://github.com/RadTech-Solutions/msvolcano"
 url: "https://radtech-solutions.github.io/msvolcano/"
 doi: "10.5281/zenodo.23262108"
-version: 2.0.0
+version: 2.0.1
 date-released: 2026-10-09
 license: PolyForm-Noncommercial-1.0.0
 preferred-citation:

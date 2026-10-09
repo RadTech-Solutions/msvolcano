@@ -1,7 +1,7 @@
 {
   "title": "msVolcano",
   "upload_type": "software",
-  "description": "<p>Volcano plots for label free interactomics data. A browser rewrite of the msVolcano Shiny app described in Singh, Hein and Stewart, Proteomics 2016;16(18):2491. Everything runs client side, so data stays on the user's machine.</p><p>Live: <a href=\"https://uksurd88.github.io/msvolcano/\">https://uksurd88.github.io/msvolcano/</a></p>",
+  "description": "<p>Volcano plots for label free interactomics data. A browser rewrite of the msVolcano Shiny app described in Singh, Hein and Stewart, Proteomics 2016;16(18):2491. Everything runs client side, so data stays on the user's machine.</p><p>Live: <a href=\"https://radtech-solutions.github.io/msvolcano/\">https://radtech-solutions.github.io/msvolcano/</a></p>",
   "creators": [
     {
       "name": "Singh, Sukhdeep"
@@ -24,7 +24,7 @@
       "resource_type": "publication-article"
     },
     {
-      "identifier": "https://uksurd88.github.io/msvolcano/",
+      "identifier": "https://radtech-solutions.github.io/msvolcano/",
       "relation": "isDocumentedBy",
       "scheme": "url"
     }

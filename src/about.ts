@@ -69,7 +69,7 @@ export const aboutHtml = `
 
   <h3>How to cite</h3>
   <p>If you use msVolcano, please cite the paper:</p>
-  <p class="cite">Singh S, Hein MY, Stewart AF. msVolcano: A flexible web application for visualizing quantitative proteomics data. <em>Proteomics</em> 2016;16(18):2491. <a href="https://doi.org/10.1002/pmic.201600167">doi:10.1002/pmic.201600167</a> (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5096246/">PMC5096246</a>, <a href="https://pubmed.ncbi.nlm.nih.gov/27440201/">PubMed</a>)</p>
+  <p class="cite">Singh S, Hein MY, Stewart AF. msVolcano: A flexible web application for visualizing quantitative proteomics data. <em>Proteomics</em> 2016;16(18):2491. <a href="https://doi.org/10.1002/pmic.201600167">doi:10.1002/pmic.201600167</a> (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5096246/">PMC5096246</a>, <a href="https://pubmed.ncbi.nlm.nih.gov/27440201/">PubMed</a>)<a class="gh-pub" href="https://github.com/RadTech-Solutions/msvolcano" aria-label="msVolcano on GitHub (RadTech)" title="msVolcano on GitHub (RadTech)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg>GitHub</a></p>
   <p>To cite the software itself, use the archived release on Zenodo: Singh S. msVolcano. Zenodo. <a href="https://doi.org/10.5281/zenodo.23262108">doi:10.5281/zenodo.23262108</a>. This DOI always points to the latest release. The repository also has a <code>CITATION.cff</code>, so GitHub offers a "Cite this repository" button.</p>
 
   <h3>References</h3>
@@ -85,10 +85,10 @@ export const aboutHtml = `
   </ol>
 
   <h3>License</h3>
-  <p>msVolcano is free for noncommercial use under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>. Research, teaching, personal study and nonprofit use are covered. If you copy, modify or redistribute the code, you must keep the <a href="https://github.com/uksurd88/msvolcano/blob/main/NOTICE"><code>NOTICE</code></a> file, which names the author and asks users to cite the paper. This is source available software, not OSI approved open source.</p>
+  <p>msVolcano is free for noncommercial use under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial License 1.0.0</a>. Research, teaching, personal study and nonprofit use are covered. If you copy, modify or redistribute the code, you must keep the <a href="https://github.com/RadTech-Solutions/msvolcano/blob/main/NOTICE"><code>NOTICE</code></a> file, which names the author and asks users to cite the paper. This is source available software, not OSI approved open source.</p>
   <p>Commercial use needs a separate commercial license. Contact the author through the profile below.</p>
 
   <h3>History and author</h3>
   <p>The original web app ran on a server at BIOTEC, TU Dresden. That server was retired and the link in the paper stopped working. This site is a rewrite, not a copy: the statistics were reimplemented in TypeScript, and the t-test and p value arithmetic was checked against reference values from SciPy. Behaviour follows the description in the paper except where listed under "New in version 2".</p>
-  <p>Author: Sukhdeep Singh. <a href="https://scholar.google.com/citations?user=y62wfS8AAAAJ&hl=en">Google Scholar profile</a>. Source code and issue tracker: <a href="https://github.com/uksurd88/msvolcano">github.com/uksurd88/msvolcano</a>.</p>
+  <p>Author: Sukhdeep Singh. <a href="https://scholar.google.com/citations?user=y62wfS8AAAAJ&hl=en">Google Scholar profile</a>. Source code and issue tracker: <a href="https://github.com/RadTech-Solutions/msvolcano">github.com/RadTech-Solutions/msvolcano</a>, maintained by <a href="https://radtech.nl">RadTech</a>.</p>
 </article>`;

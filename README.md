@@ -4,6 +4,8 @@
 
 Volcano plots for label free interactomics data from MaxQuant. Load a `proteinGroups.txt`, pick bait and control LFQ columns, tune the hyperbolic cutoff, and export the plot and the list of interactors. Everything runs in your browser, so your data stays on your machine.
 
+Live: https://radtech-solutions.github.io/msvolcano/ (maintained by [RadTech](https://radtech.nl))
+
 A browser rewrite of the Shiny app described in the original paper. The old server at TU Dresden BIOTEC is gone.
 
 The site has two versions, chosen with the switch at the top of the page:

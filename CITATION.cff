@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Singh
     given-names: Sukhdeep
-repository-code: "https://github.com/uksurd88/msvolcano"
-url: "https://uksurd88.github.io/msvolcano/"
+repository-code: "https://github.com/RadTech-Solutions/msvolcano"
+url: "https://radtech-solutions.github.io/msvolcano/"
 doi: "10.5281/zenodo.23262108"
 version: 2.0.0
 date-released: 2026-10-09

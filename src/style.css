@@ -315,6 +315,11 @@ tbody tr:hover { background: var(--color-surface-2); }
 .about .refs li { font-size: .88rem; }
 .badge { display: inline-block; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; background: var(--color-warn-soft); color: var(--color-warn); border: 1px solid color-mix(in oklch, var(--color-warn) 35%, transparent); vertical-align: 1px; }
 footer.foot { padding: var(--space-5); text-align: center; color: var(--color-ink-3); font-size: .82rem; }
+.gh-pub { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; vertical-align: middle; color: var(--color-ink-2); text-decoration: none; font-weight: 500; }
+.gh-pub:hover { color: var(--color-ink); }
+.gh-pub svg { width: 18px; height: 18px; }
+.about .cite .gh-pub { padding: 2px 8px; border: 1px solid var(--color-line-strong); border-radius: 999px; font-size: .82rem; }
+.about .cite .gh-pub svg { width: 15px; height: 15px; }
 
 /* Responsive */
 @media (max-width: 960px) {

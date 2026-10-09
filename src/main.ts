@@ -89,7 +89,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <button type="button" data-theme-set="system" aria-pressed="true" title="Match system" aria-label="Match system">${ICON.auto}<span class="lbl">Auto</span></button>
     <button type="button" data-theme-set="dark" aria-pressed="false" title="Dark" aria-label="Dark">${ICON.moon}<span class="lbl">Dark</span></button>
   </div>
-  <a class="icon-link" href="https://github.com/uksurd88/msvolcano" aria-label="Source code on GitHub" title="Source code on GitHub">${ICON.github}</a>
+  <a class="icon-link" href="https://github.com/RadTech-Solutions/msvolcano" aria-label="Source code on GitHub" title="Source code on GitHub">${ICON.github}</a>
 </header>
 
 <section class="verbar" id="verbar" aria-label="Choose the version">
@@ -216,7 +216,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
 </div>
 
 <main id="about-view" hidden>${aboutHtml}</main>
-<footer class="foot">If you use msVolcano, please cite <a href="https://doi.org/10.1002/pmic.201600167">Singh, Hein and Stewart, Proteomics 2016</a>. Free for noncommercial use under the PolyForm Noncommercial License 1.0.0.<small>Version ${__APP_VERSION__}</small></footer>
+<footer class="foot"><span class="pub">If you use msVolcano, please cite <a href="https://doi.org/10.1002/pmic.201600167">Singh, Hein and Stewart, Proteomics 2016</a>.<a class="gh-pub" href="https://github.com/RadTech-Solutions/msvolcano" aria-label="msVolcano on GitHub (RadTech)" title="msVolcano on GitHub (RadTech)">${ICON.github}</a></span> Free for noncommercial use under the PolyForm Noncommercial License 1.0.0. Maintained by <a href="https://radtech.nl">RadTech</a>.<small>Version ${__APP_VERSION__}</small></footer>
 <div class="mbar" id="mbar" hidden><b id="mbar-count"></b><span style="flex:1"></span><button class="btn small" id="mbar-adjust" type="button">Adjust cutoff</button><button class="btn small" id="mbar-plot" type="button">Plot</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>`;
 

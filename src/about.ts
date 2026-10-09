@@ -70,7 +70,7 @@ export const aboutHtml = `
   <h3>How to cite</h3>
   <p>If you use msVolcano, please cite the paper:</p>
   <p class="cite">Singh S, Hein MY, Stewart AF. msVolcano: A flexible web application for visualizing quantitative proteomics data. <em>Proteomics</em> 2016;16(18):2491. <a href="https://doi.org/10.1002/pmic.201600167">doi:10.1002/pmic.201600167</a> (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC5096246/">PMC5096246</a>, <a href="https://pubmed.ncbi.nlm.nih.gov/27440201/">PubMed</a>)</p>
-  <p>The repository also has a <code>CITATION.cff</code>, so GitHub offers a "Cite this repository" button. A software DOI will be added when the first release is archived.</p>
+  <p>To cite the software itself, use the archived release on Zenodo: Singh S. msVolcano. Zenodo. <a href="https://doi.org/10.5281/zenodo.23262108">doi:10.5281/zenodo.23262108</a>. This DOI always points to the latest release. The repository also has a <code>CITATION.cff</code>, so GitHub offers a "Cite this repository" button.</p>
 
   <h3>References</h3>
   <ol class="refs">

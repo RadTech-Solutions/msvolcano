@@ -1,5 +1,7 @@
 # msVolcano
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23262108.svg)](https://doi.org/10.5281/zenodo.23262108)
+
 Volcano plots for label free interactomics data from MaxQuant. Load a `proteinGroups.txt`, pick bait and control LFQ columns, tune the hyperbolic cutoff, and export the plot and the list of interactors. Everything runs in your browser, so your data stays on your machine.
 
 A browser rewrite of the Shiny app described in the original paper. The old server at TU Dresden BIOTEC is gone.
@@ -49,7 +51,7 @@ If you use msVolcano, cite:
 
 Singh S, Hein MY, Stewart AF. msVolcano: A flexible web application for visualizing quantitative proteomics data. Proteomics 2016;16(18):2491. https://doi.org/10.1002/pmic.201600167
 
-GitHub shows a "Cite this repository" button from `CITATION.cff`.
+To cite the software, use the Zenodo DOI [10.5281/zenodo.23262108](https://doi.org/10.5281/zenodo.23262108), which always points to the latest release. GitHub also shows a "Cite this repository" button from `CITATION.cff`.
 
 ## License
 
